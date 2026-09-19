@@ -1,0 +1,46 @@
+{
+  "name": "@vijaykumarjob0701/rql",
+  "version": "0.1.0",
+  "description": "RQL \u2014 Retrieval Query Language: parse, compile, explain, emit (sketches)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src/profiles",
+    "src/schema_data",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc && node scripts/copy-assets.mjs",
+    "test": "npm run build && node --import tsx --test tests/*.test.ts",
+    "test:dist": "npm run build && node --test dist-tests/*.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "private": true,
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vijaykumarjob0701/rql-lang.git"
+  },
+  "keywords": [
+    "rql",
+    "retrieval",
+    "rag",
+    "vector",
+    "query-language"
+  ]
+}

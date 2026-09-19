@@ -1,0 +1,8 @@
+-- Schema-aligned toy RQL → LogicalPlan (Hypothesis subset)
+-- Matches intent of 01-hybrid-rrf.logical.json
+
+RETRIEVE chunks
+  SEARCH
+    DENSE ON embedding METRIC cosine CANDIDATES 50 QUERY 'portable retrieval IR for RAG' VECTOR_REF $q_dense
+    AND BM25 ON content CANDIDATES 50 QUERY 'portable retrieval IR for RAG'
+  FUSE RRF K 60;

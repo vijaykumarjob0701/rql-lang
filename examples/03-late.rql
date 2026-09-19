@@ -1,0 +1,5 @@
+-- Schema-aligned toy RQL → LogicalPlan (Hypothesis subset)
+-- Matches intent of 03-late-plaid-rewrite.logical.json (logical leaf only)
+
+RETRIEVE passages_mv
+  SEARCH LATE ON token_vectors CANDIDATES 10 QUERY 'late interaction MaxSim' VECTOR_REF $q_tok;

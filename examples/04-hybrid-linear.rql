@@ -1,0 +1,9 @@
+-- Extra toy example: Fuse_linear (Hypothesis packaging; Bruch CC Established)
+
+RETRIEVE products
+  SEARCH
+    DENSE ON embedding METRIC cosine CANDIDATES 30 QUERY 'electronics deals' VECTOR_REF $q_dense
+    AND BM25 ON description CANDIDATES 30 QUERY 'electronics deals'
+  WHERE category = 'electronics' AND price < 500
+  FUSE LINEAR WEIGHTS (0.5, 0.5)
+  LIMIT 12;

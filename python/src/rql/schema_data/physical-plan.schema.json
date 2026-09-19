@@ -1,0 +1,300 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rql.local/schemas/physical-plan.schema.json",
+  "title": "RQL PhysicalPlan (draft Hypothesis IR)",
+  "description": "Draft JSON Schema for RQL PhysicalPlan v0.1.0-draft. Hypothesis packaging of FilterExec modes (thesis §06 / FANNS), AnnExec, FusionExec, LateInteractExec (colbert/plaid/muvera), ShimCast, and optional recall/latency budgets. NOT a published standard.",
+  "type": "object",
+  "required": ["schemaVersion", "kind", "root"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1.0-draft"
+    },
+    "kind": {
+      "type": "string",
+      "const": "PhysicalPlan"
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "label": {
+          "type": "string",
+          "enum": ["Hypothesis", "Established", "Provisional"]
+        },
+        "logicalPlanRef": {
+          "type": "string",
+          "description": "Optional path/id of corresponding LogicalPlan artifact."
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "budgets": {
+      "$ref": "#/$defs/Budgets"
+    },
+    "capabilitiesUsed": {
+      "$ref": "#/$defs/CapabilityAnnotations"
+    },
+    "root": {
+      "$ref": "#/$defs/PhysicalOp"
+    }
+  },
+  "$defs": {
+    "PosInt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "FilterExecMode": {
+      "type": "string",
+      "enum": [
+        "PRE",
+        "POST",
+        "ITERATIVE",
+        "SUBGRAPH",
+        "SPECIALIZED",
+        "PARTITION",
+        "ROUTER",
+        "AUTO"
+      ],
+      "description": "FilterExec modes from thesis §06 / docs/08. Mode names are Hypothesis packaging of FANNS/ACORN/VBASE/Filtered-DiskANN survey structure."
+    },
+    "Budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional BlinkDB-style surface budgets (Hypothesis).",
+      "properties": {
+        "recallTarget": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Soft recall proxy target; not a measured claim."
+        },
+        "latencyMs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "p50": { "type": "number", "minimum": 0 },
+            "p95": { "type": "number", "minimum": 0 }
+          }
+        },
+        "aclSafe": {
+          "type": "boolean",
+          "description": "Hard constraint: ACL predicates must remain enforceable."
+        },
+        "tokenBudget": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "CapabilityAnnotations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "filterAnnComposition": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "PRE",
+              "POST",
+              "ITERATIVE",
+              "SUBGRAPH",
+              "SPECIALIZED",
+              "PARTITION",
+              "ROUTER",
+              "LEAF_PROPAGATED",
+              "HYBRID_BATCHES",
+              "UNKNOWN"
+            ]
+          }
+        },
+        "hybridBm25Dense": { "type": "boolean" },
+        "rrfNative": { "type": "boolean" },
+        "weightedFusionNative": { "type": "boolean" },
+        "multiVectorLate": { "type": "boolean" },
+        "latePlaid": { "type": "boolean" },
+        "fdeMips": { "type": "boolean" },
+        "explainNative": { "type": "boolean" },
+        "annIterator": { "type": "boolean" },
+        "vendorHints": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "PhysicalOp": {
+      "oneOf": [
+        { "$ref": "#/$defs/FilterExec" },
+        { "$ref": "#/$defs/AnnExec" },
+        { "$ref": "#/$defs/Bm25Exec" },
+        { "$ref": "#/$defs/FusionExec" },
+        { "$ref": "#/$defs/LateInteractExec" },
+        { "$ref": "#/$defs/ShimCast" },
+        { "$ref": "#/$defs/RerankExec" },
+        { "$ref": "#/$defs/PassThrough" }
+      ]
+    },
+    "FilterExec": {
+      "type": "object",
+      "required": ["op", "mode", "predicate", "input"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "FilterExec" },
+        "mode": { "$ref": "#/$defs/FilterExecMode" },
+        "pruningStrategy": {
+          "type": "string",
+          "enum": ["VSP", "VJP", "SJP", "SSP", "unknown"],
+          "description": "Optional FANNS survey label when known (Established vocabulary)."
+        },
+        "predicate": {
+          "type": "object",
+          "required": ["expr"],
+          "additionalProperties": false,
+          "properties": {
+            "expr": { "type": "string" },
+            "aclHard": { "type": "boolean" }
+          }
+        },
+        "input": { "$ref": "#/$defs/PhysicalOp" }
+      }
+    },
+    "AnnExec": {
+      "type": "object",
+      "required": ["op", "k"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "AnnExec" },
+        "k": { "$ref": "#/$defs/PosInt" },
+        "index": {
+          "type": "string",
+          "enum": ["hnsw", "ivf", "diskann", "flat", "other", "unknown"]
+        },
+        "efSearch": { "$ref": "#/$defs/PosInt" },
+        "nprobe": { "$ref": "#/$defs/PosInt" },
+        "metric": {
+          "type": "string",
+          "enum": ["cosine", "l2", "ip", "unknown"]
+        },
+        "queryRef": { "type": "string" },
+        "collection": { "type": "string" }
+      }
+    },
+    "Bm25Exec": {
+      "type": "object",
+      "required": ["op", "k"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Bm25Exec" },
+        "k": { "$ref": "#/$defs/PosInt" },
+        "queryText": { "type": "string" },
+        "collection": { "type": "string" }
+      }
+    },
+    "FusionExec": {
+      "type": "object",
+      "required": ["op", "family", "inputs"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "FusionExec" },
+        "family": {
+          "type": "string",
+          "enum": ["rrf", "linear", "ltr", "condorcet"]
+        },
+        "k_rrf": { "type": "integer", "minimum": 1 },
+        "alpha": {
+          "type": "array",
+          "items": { "type": "number" }
+        },
+        "phi": { "type": "string" },
+        "model": { "type": "string" },
+        "native": {
+          "type": "boolean",
+          "description": "True if backend native fuse; false if client shim expected."
+        },
+        "inputs": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/PhysicalOp" }
+        }
+      }
+    },
+    "LateInteractExec": {
+      "type": "object",
+      "required": ["op", "variant", "k"],
+      "additionalProperties": false,
+      "description": "Physical late-interaction ladder: colbert (native MaxSim), plaid (centroid prune), muvera (FDE+MaxSim rerank). Packaging Hypothesis; mechanisms Established in literature.",
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "LateInteractExec" },
+        "variant": {
+          "type": "string",
+          "enum": ["colbert", "plaid", "muvera"]
+        },
+        "k": { "$ref": "#/$defs/PosInt" },
+        "candidateDepth": { "$ref": "#/$defs/PosInt" },
+        "queryRef": { "type": "string" },
+        "collection": { "type": "string" },
+        "input": {
+          "$ref": "#/$defs/PhysicalOp",
+          "description": "Optional upstream (e.g. FDE AnnExec for muvera)."
+        }
+      }
+    },
+    "ShimCast": {
+      "type": "object",
+      "required": ["op", "shim", "input"],
+      "additionalProperties": false,
+      "description": "Explicit client/adapter CAST when native capability missing (Hypothesis). Mark expensive / ACL-unsafe when scores leave trust boundary.",
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "ShimCast" },
+        "shim": {
+          "type": "string",
+          "enum": [
+            "client_rrf",
+            "client_linear",
+            "client_filter",
+            "sql_explain_wrap",
+            "other"
+          ]
+        },
+        "expensive": { "type": "boolean" },
+        "aclUnsafe": {
+          "type": "boolean",
+          "description": "True if shim moves ACL enforcement off trusted backend."
+        },
+        "input": { "$ref": "#/$defs/PhysicalOp" }
+      }
+    },
+    "RerankExec": {
+      "type": "object",
+      "required": ["op", "model", "input"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "RerankExec" },
+        "model": { "type": "string" },
+        "n": { "$ref": "#/$defs/PosInt" },
+        "input": { "$ref": "#/$defs/PhysicalOp" }
+      }
+    },
+    "PassThrough": {
+      "type": "object",
+      "required": ["op", "input"],
+      "additionalProperties": false,
+      "description": "Identity / bookkeeping node for EXPLAIN trees.",
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "PassThrough" },
+        "label": { "type": "string" },
+        "input": { "$ref": "#/$defs/PhysicalOp" }
+      }
+    }
+  }
+}

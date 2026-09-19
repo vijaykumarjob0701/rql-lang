@@ -1,0 +1,7 @@
+-- Schema-aligned toy RQL → LogicalPlan (Hypothesis subset)
+-- Matches intent of 02-filtered-dense.logical.json
+
+RETRIEVE chunks
+  SEARCH DENSE ON embedding METRIC cosine CANDIDATES 20 QUERY 'ACL-safe filtered ANN' VECTOR_REF $q_dense
+  WHERE tenant_id = 'acme' AND clearance >= 2
+  ACL_HARD;

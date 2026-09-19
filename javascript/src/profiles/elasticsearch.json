@@ -1,0 +1,27 @@
+{
+  "id": "elasticsearch",
+  "label": "Hypothesis",
+  "source": "docs/09-vendor-api-matrix.md (journal 0020); docs-only flags — not a live probe",
+  "vendorHints": ["elasticsearch"],
+  "capabilities": {
+    "filterAnnComposition": ["PRE"],
+    "hybridBm25Dense": true,
+    "rrfNative": true,
+    "weightedFusionNative": true,
+    "multiVectorLate": false,
+    "latePlaid": false,
+    "fdeMips": false,
+    "explainNative": true,
+    "annIterator": false
+  },
+  "filterCaps": {
+    "subgraph": false,
+    "specialized_labels": false,
+    "ann_iterator": false
+  },
+  "defaults": {
+    "annIndex": "hnsw",
+    "efSearch": 64
+  },
+  "notes": "Established docs: knn.filter during approximate kNN (PRE-like); retriever.rrf; Profile API. Late-interaction native: UNKNOWN/partial → multiVectorLate false."
+}

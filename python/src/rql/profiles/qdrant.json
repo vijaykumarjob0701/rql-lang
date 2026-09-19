@@ -1,0 +1,27 @@
+{
+  "id": "qdrant",
+  "label": "Hypothesis",
+  "source": "docs/09-vendor-api-matrix.md (journal 0020); docs-only flags — not a live probe",
+  "vendorHints": ["qdrant"],
+  "capabilities": {
+    "filterAnnComposition": ["LEAF_PROPAGATED", "UNKNOWN"],
+    "hybridBm25Dense": true,
+    "rrfNative": true,
+    "weightedFusionNative": true,
+    "multiVectorLate": true,
+    "latePlaid": false,
+    "fdeMips": false,
+    "explainNative": false,
+    "annIterator": false
+  },
+  "filterCaps": {
+    "subgraph": false,
+    "specialized_labels": false,
+    "ann_iterator": false
+  },
+  "defaults": {
+    "annIndex": "hnsw",
+    "efSearch": 64
+  },
+  "notes": "Established docs: JSON Filter; leaf/prefetch filter propagation (PR #4427); native rrf + weights/dbsf; multivector/ColBERT rescore. Exact PRE vs in-graph: UNKNOWN without runtime."
+}

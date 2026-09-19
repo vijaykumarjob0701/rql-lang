@@ -1,0 +1,390 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rql.local/schemas/logical-plan.schema.json",
+  "title": "RQL LogicalPlan (draft Hypothesis IR)",
+  "description": "Draft JSON Schema for RQL LogicalPlan v0.1.0-draft. Hypothesis packaging of evidence operators from docs/08 and thesis §05. NOT a published standard. Mechanisms cited as Established in literature remain Established; this IR naming/encoding is Hypothesis.",
+  "type": "object",
+  "required": ["schemaVersion", "kind", "root"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1.0-draft"
+    },
+    "kind": {
+      "type": "string",
+      "const": "LogicalPlan"
+    },
+    "meta": {
+      "type": "object",
+      "description": "Optional authorship / honesty labels (not executed).",
+      "additionalProperties": true,
+      "properties": {
+        "label": {
+          "type": "string",
+          "enum": ["Hypothesis", "Established", "Provisional"]
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "capabilities": {
+      "$ref": "#/$defs/CapabilityAnnotations",
+      "description": "Optional required/desired capability flags (mirrors vendor matrix columns)."
+    },
+    "root": {
+      "$ref": "#/$defs/LogicalOp"
+    }
+  },
+  "$defs": {
+    "NonNegInt": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "PosInt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "Channel": {
+      "type": "string",
+      "enum": ["dense", "bm25", "late", "graph", "fused", "other"]
+    },
+    "CapabilityAnnotations": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional flags aligning with docs/09 vendor-matrix columns and FilterExec modes.",
+      "properties": {
+        "filterAnnComposition": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "PRE",
+              "POST",
+              "ITERATIVE",
+              "SUBGRAPH",
+              "SPECIALIZED",
+              "PARTITION",
+              "ROUTER",
+              "LEAF_PROPAGATED",
+              "HYBRID_BATCHES",
+              "UNKNOWN"
+            ]
+          }
+        },
+        "hybridBm25Dense": { "type": "boolean" },
+        "rrfNative": { "type": "boolean" },
+        "weightedFusionNative": { "type": "boolean" },
+        "multiVectorLate": { "type": "boolean" },
+        "latePlaid": { "type": "boolean" },
+        "fdeMips": { "type": "boolean" },
+        "explainNative": { "type": "boolean" },
+        "annIterator": { "type": "boolean" },
+        "vendorHints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Non-normative hints (e.g. qdrant, pgvector); not a portability claim."
+        }
+      }
+    },
+    "Predicate": {
+      "type": "object",
+      "required": ["expr"],
+      "additionalProperties": false,
+      "properties": {
+        "expr": {
+          "type": "string",
+          "description": "Opaque predicate string (SQL/JSON/expr); semantics are adapter-local."
+        },
+        "aclHard": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, physical plans must not strip this predicate client-side (Hypothesis)."
+        }
+      }
+    },
+    "QuerySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "vectorRef": {
+          "type": "string",
+          "description": "Symbolic embedding/handle reference; not raw vectors in schema examples."
+        },
+        "channel": { "$ref": "#/$defs/Channel" }
+      }
+    },
+    "LogicalOp": {
+      "oneOf": [
+        { "$ref": "#/$defs/SearchDense" },
+        { "$ref": "#/$defs/SearchBm25" },
+        { "$ref": "#/$defs/SearchLate" },
+        { "$ref": "#/$defs/Filter" },
+        { "$ref": "#/$defs/Union" },
+        { "$ref": "#/$defs/FuseRrf" },
+        { "$ref": "#/$defs/FuseLinear" },
+        { "$ref": "#/$defs/FuseLtr" },
+        { "$ref": "#/$defs/FuseCondorcet" },
+        { "$ref": "#/$defs/Diversify" },
+        { "$ref": "#/$defs/Rerank" },
+        { "$ref": "#/$defs/Expand" },
+        { "$ref": "#/$defs/Rewrite" },
+        { "$ref": "#/$defs/Traverse" },
+        { "$ref": "#/$defs/VSimJoin" },
+        { "$ref": "#/$defs/Ext" }
+      ]
+    },
+    "OpBase": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Optional node id for EXPLAIN / provenance."
+        }
+      }
+    },
+    "SearchDense": {
+      "type": "object",
+      "required": ["op", "k"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Search_dense" },
+        "k": { "$ref": "#/$defs/PosInt" },
+        "query": { "$ref": "#/$defs/QuerySpec" },
+        "metric": {
+          "type": "string",
+          "enum": ["cosine", "l2", "ip", "unknown"]
+        },
+        "collection": { "type": "string" }
+      }
+    },
+    "SearchBm25": {
+      "type": "object",
+      "required": ["op", "k"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Search_bm25" },
+        "k": { "$ref": "#/$defs/PosInt" },
+        "query": { "$ref": "#/$defs/QuerySpec" },
+        "collection": { "type": "string" }
+      }
+    },
+    "SearchLate": {
+      "type": "object",
+      "required": ["op", "k"],
+      "additionalProperties": false,
+      "description": "Late interaction / MaxSim-sum leaf. Scoring mechanism Established (ColBERT); RQL op packaging Hypothesis.",
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Search_late" },
+        "k": { "$ref": "#/$defs/PosInt" },
+        "query": { "$ref": "#/$defs/QuerySpec" },
+        "collection": { "type": "string" }
+      }
+    },
+    "Filter": {
+      "type": "object",
+      "required": ["op", "predicate", "input"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Filter" },
+        "predicate": { "$ref": "#/$defs/Predicate" },
+        "input": { "$ref": "#/$defs/LogicalOp" }
+      }
+    },
+    "Union": {
+      "type": "object",
+      "required": ["op", "inputs"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Union" },
+        "inputs": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/LogicalOp" }
+        }
+      }
+    },
+    "FuseRrf": {
+      "type": "object",
+      "required": ["op", "inputs"],
+      "additionalProperties": false,
+      "description": "RRF formula Established (Cormack SIGIR'09, default k=60); RQL op packaging Hypothesis.",
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Fuse_rrf" },
+        "k_rrf": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 60
+        },
+        "inputs": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/LogicalOp" }
+        }
+      }
+    },
+    "FuseLinear": {
+      "type": "object",
+      "required": ["op", "inputs"],
+      "additionalProperties": false,
+      "description": "Convex combo / CC-TM2C2 mechanism Established (Bruch); packaging Hypothesis.",
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Fuse_linear" },
+        "alpha": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "number" },
+          "description": "Channel weights; normalization policy adapter-local."
+        },
+        "phi": {
+          "type": "string",
+          "description": "Optional normalisation label (e.g. tm2c2, minmax)."
+        },
+        "inputs": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/LogicalOp" }
+        }
+      }
+    },
+    "FuseLtr": {
+      "type": "object",
+      "required": ["op", "inputs", "model"],
+      "additionalProperties": false,
+      "description": "Learned multi-feature fuse — Hypothesis (not a Bruch TM2C2 claim).",
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Fuse_ltr" },
+        "model": { "type": "string" },
+        "inputs": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/LogicalOp" }
+        }
+      }
+    },
+    "FuseCondorcet": {
+      "type": "object",
+      "required": ["op", "inputs"],
+      "additionalProperties": false,
+      "description": "Pairwise-majority Condorcet-fuse mechanism Established (Montague–Aslam); packaging Hypothesis.",
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Fuse_condorcet" },
+        "inputs": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/LogicalOp" }
+        }
+      }
+    },
+    "Diversify": {
+      "type": "object",
+      "required": ["op", "input"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Diversify" },
+        "method": {
+          "type": "string",
+          "enum": ["mmr", "other"],
+          "default": "mmr"
+        },
+        "lambda": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "input": { "$ref": "#/$defs/LogicalOp" }
+      }
+    },
+    "Rerank": {
+      "type": "object",
+      "required": ["op", "input", "model"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Rerank" },
+        "model": { "type": "string" },
+        "n": { "$ref": "#/$defs/PosInt" },
+        "input": { "$ref": "#/$defs/LogicalOp" }
+      }
+    },
+    "Expand": {
+      "type": "object",
+      "required": ["op", "input"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Expand" },
+        "mode": {
+          "type": "string",
+          "enum": ["parent", "window", "other"]
+        },
+        "input": { "$ref": "#/$defs/LogicalOp" }
+      }
+    },
+    "Rewrite": {
+      "type": "object",
+      "required": ["op", "method"],
+      "additionalProperties": false,
+      "description": "Query rewrite producing q*; typically feeds Search_* leaves.",
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Rewrite" },
+        "method": {
+          "type": "string",
+          "enum": ["hyde", "multi_query", "other"]
+        },
+        "query": { "$ref": "#/$defs/QuerySpec" },
+        "then": {
+          "$ref": "#/$defs/LogicalOp",
+          "description": "Optional continuation that consumes rewritten query (Hypothesis wiring)."
+        }
+      }
+    },
+    "Traverse": {
+      "type": "object",
+      "required": ["op", "input", "hops"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Traverse" },
+        "hops": { "$ref": "#/$defs/PosInt" },
+        "pattern": { "type": "string" },
+        "input": { "$ref": "#/$defs/LogicalOp" }
+      }
+    },
+    "VSimJoin": {
+      "type": "object",
+      "required": ["op", "left", "right"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "VSimJoin" },
+        "theta": { "type": "number" },
+        "left": { "$ref": "#/$defs/LogicalOp" },
+        "right": { "$ref": "#/$defs/LogicalOp" }
+      }
+    },
+    "Ext": {
+      "type": "object",
+      "required": ["op", "input", "fn"],
+      "additionalProperties": false,
+      "description": "Generic map/flatmap (Lara-inspired Ext) — Hypothesis.",
+      "properties": {
+        "id": { "type": "string" },
+        "op": { "const": "Ext" },
+        "fn": { "type": "string" },
+        "input": { "$ref": "#/$defs/LogicalOp" }
+      }
+    }
+  }
+}
