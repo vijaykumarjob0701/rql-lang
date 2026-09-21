@@ -14,7 +14,9 @@
 
 A **v0.1 importable library**: parse RQL → LogicalPlan → compile to PhysicalPlan (vendor capability profiles) → explain / emit.
 
-`emit` returns **docs-shaped sketches** (`notExecuted: true`). It does **not** talk to live Qdrant / Elasticsearch / pgvector. The adapter interface is ready for live backends (see `docs/ROADMAP.md`).
+`emit` returns **docs-shaped sketches** (`notExecuted: true`) and does **not** talk to a database.
+
+`execute` is an **opt-in** live path for Qdrant (`backend="qdrant"`). It POSTs Query API requests (`/collections/{name}/points/query`) using `QDRANT_URL` (default `http://localhost:6333`) and optional `QDRANT_API_KEY`. Elasticsearch and pgvector remain sketch-only. See `docs/API.md` and `examples/qdrant_live_execute.py`.
 
 ## Layout
 
@@ -37,11 +39,13 @@ python -m pytest python/tests -q
 ```
 
 ```python
-from rql import parse, compile, explain, emit
+from rql import parse, compile, explain, emit, execute
 logical = parse(open("examples/01-hybrid-rrf.rql").read())
 physical = compile(logical, profile="qdrant")
 print(explain(physical))
-print(emit(physical, backend="qdrant")["notExecuted"])  # True
+print(emit(physical, backend="qdrant")["notExecuted"])  # True — sketch
+# Opt-in live (needs Qdrant + real vectors):
+# execute(physical, backend="qdrant", vectors={"dense": [...], "sparse": {"indices": [...], "values": [...]}})
 ```
 
 ### JavaScript / TypeScript
@@ -57,7 +61,7 @@ import { parse, compile, explain, emit } from "@vijaykumarjob0701/rql";
 ## Honesty
 
 - Profiles are **docs-derived** capability flags, not live probes.
-- Emit is **sketch-only** until live adapters land.
+- `emit` is **sketch-only**. `execute` is opt-in Qdrant only; CI uses mocked HTTP.
 - Do not publish to PyPI/npm from this tree yet; repo is intended to stay **private** until release.
 
 ## License
