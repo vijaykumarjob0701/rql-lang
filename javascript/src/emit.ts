@@ -39,6 +39,7 @@ export type EmitOptions = {
 export interface Adapter {
   name: string;
   emit(physical: Record<string, unknown>): EmitResult;
+  execute?(planOrEmit: Record<string, unknown>, options?: Record<string, unknown>): unknown;
 }
 
 export function listVendors(): string[] {
@@ -433,6 +434,10 @@ const adapters: Record<string, Adapter> = Object.fromEntries(
 
 export function registerAdapter(adapter: Adapter): void {
   adapters[adapter.name] = adapter;
+}
+
+export function getAdapter(name: string): Adapter | undefined {
+  return adapters[name];
 }
 
 /** Emit a vendor request sketch (EmitResult). No live DB I/O. */

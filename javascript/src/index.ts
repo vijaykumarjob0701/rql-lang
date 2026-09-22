@@ -1,7 +1,7 @@
 /**
  * RQL — Retrieval Query Language library (TypeScript / JavaScript).
  *
- * Public API: parse → compile → explain / emit (sketches in v0.1).
+ * Public API: parse → compile → explain / emit (sketches) / execute (opt-in Qdrant).
  */
 
 export const VERSION = "0.1.0";
@@ -25,6 +25,10 @@ export {
   VENDORS,
 } from "./emit.js";
 export type { EmitResult, EmitOptions, Adapter, Vendor } from "./emit.js";
+
+export { execute, ExecutionError, QdrantAdapter } from "./execute.js";
+export type { ExecuteOptions } from "./execute.js";
+export type { ExecuteResult, ExecuteHit, QdrantTransport, VectorBindings } from "./qdrant.js";
 
 export {
   schemasDir,

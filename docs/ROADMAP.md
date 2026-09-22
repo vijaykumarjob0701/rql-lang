@@ -7,14 +7,18 @@
 - [x] Shared schemas `0.1.0-draft` + toy `.rql` examples
 - [x] Capability profiles: qdrant, elasticsearch, pgvector
 - [x] Emit **sketches** only + pluggable adapter interface
-- [ ] First **live** adapter (read-only smoke against one vendor; gated, opt-in)
+- [x] First **live** adapter: opt-in Qdrant `execute()` (mocked HTTP in CI; optional `QDRANT_URL` smoke)
+- [x] Python CLI (`rql` / `python -m rql`): one-shot, REPL, meta-commands
+- [x] Thin JS one-shot bin (`rql` via `package.json` bin); full REPL remains Python-first
 
 ## v0.2 — hybrid & honesty
 
-- [ ] Live hybrid RRF path where profile advertises `rrfNative`
+- [x] Live hybrid RRF prefetch for Qdrant when the physical plan is `FusionExec family=rrf`
+- [ ] Live hybrid RRF / client shim for remaining vendors
 - [ ] Client shim fusion with explicit ACL-safety notes
 - [ ] Optional jsonschema validation helpers in both languages
 - [ ] Richer `explain` (cost/capability annotations without inventing latency numbers)
+- [ ] JS interactive REPL parity with `python -m rql`
 
 ## v0.3+
 

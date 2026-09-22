@@ -33,3 +33,22 @@ class EmitResult(TypedDict):
     banner: str
     meta: dict[str, Any]
     filesuggested_ext: NotRequired[str]
+
+
+class ExecuteHit(TypedDict):
+    id: Any
+    score: Any
+    payload: NotRequired[dict[str, Any]]
+
+
+class ExecuteResult(TypedDict):
+    schemaVersion: str
+    kind: str
+    vendor: str
+    executed: bool
+    collection: str
+    hits: list[ExecuteHit]
+    timingMs: float
+    request: dict[str, Any]
+    notes: list[str]
+    meta: dict[str, Any]

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rql"
 version = "0.1.0"
-description = "RQL — Retrieval Query Language: parse, compile, explain, emit (sketches)"
+description = "RQL — Retrieval Query Language: parse, compile, explain, emit (sketches), execute (opt-in Qdrant)"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
@@ -24,6 +24,9 @@ dependencies = []
 dev = ["pytest>=7", "jsonschema>=4"]
 validate = ["jsonschema>=4"]
 
+[project.scripts]
+rql = "rql.cli:main"
+
 [project.urls]
 Research = "https://github.com/vijaykumarjob0701/rql-rag-query-language"
 Repro = "https://github.com/vijaykumarjob0701/rql-repro"
@@ -37,3 +40,6 @@ rql = ["profiles/*.json", "schema_data/*.json"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+  "integration: live backend smoke (skipped unless QDRANT_URL is set)",
+]

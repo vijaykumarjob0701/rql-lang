@@ -1,10 +1,13 @@
 {
   "name": "@vijaykumarjob0701/rql",
   "version": "0.1.0",
-  "description": "RQL \u2014 Retrieval Query Language: parse, compile, explain, emit (sketches)",
+  "description": "RQL \u2014 Retrieval Query Language: parse, compile, explain, emit (sketches), execute (opt-in Qdrant)",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "rql": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

@@ -660,7 +660,11 @@ def _pg_leaf_sql(node: dict, where: str) -> list[str]:
 
 @runtime_checkable
 class Adapter(Protocol):
-    """Pluggable backend. v0.1 ships sketch adapters only (no network I/O)."""
+    """Pluggable backend.
+
+    ``emit`` is required (sketches in v0.1). Live adapters may also expose
+    ``execute(plan_or_emit, **kwargs) -> ExecuteResult``.
+    """
 
     name: str
 
