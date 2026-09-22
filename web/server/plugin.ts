@@ -93,14 +93,22 @@ async function handleRql(req: IncomingMessage, res: ServerResponse, action: stri
       const apiKey = String(payload.apiKey ?? header(req, "x-qdrant-api-key") ?? "") || undefined;
       const collection = payload.collection ? String(payload.collection) : undefined;
       const vectors = (payload.vectors as Record<string, unknown> | undefined) ?? undefined;
-      const result = await executeAgainstQdrant({
-        physical,
-        vectors,
-        collection,
-        url,
-        apiKey,
-      });
-      sendJson(res, 200, { logical, physical, result });
+      try {
+        const result = await executeAgainstQdrant({
+          physical,
+          vectors,
+          collection,
+          url,
+          apiKey,
+        });
+        sendJson(res, 200, { logical, physical, result });
+      } catch (err) {
+        sendJson(res, err instanceof ExecutionError ? 422 : 400, {
+          ...rqlErrorPayload(err),
+          logical,
+          physical,
+        });
+      }
       return;
     }
     sendJson(res, 404, { error: `unknown rql action ${action}`, name: "RequestError" });

@@ -86,6 +86,22 @@ Rejected with the error on screen (no silent substitute):
 
 When [the live adapter PR](https://github.com/vijaykumarjob0701/rql-lang/pull/1) lands, this server can switch to library `execute()` without changing the UI.
 
+## Screenshots
+
+Captured against the seeded mock (`npm run mock-qdrant && npm run seed`).
+
+**Execute** — filtered dense + demo vector, hits table, request notes:
+
+<img alt="RQL Studio execute results" src="docs/screenshots/query-execute.webp" width="900" />
+
+**Visualize** — in-browser PCA, color-by `topic`:
+
+<img alt="RQL Studio PCA visualizer" src="docs/screenshots/visualize-pca.webp" width="900" />
+
+**Fail-closed late** — `LateInteractExec` is refused, no silent dense substitute:
+
+<img alt="RQL Studio late-interaction error" src="docs/screenshots/late-fail-closed.webp" width="900" />
+
 ## Tests
 
 ```bash

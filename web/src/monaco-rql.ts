@@ -50,6 +50,7 @@ export function registerRqlLanguage(monaco: Monaco): void {
       { token: "variable", foreground: "ff8b6b" },
       { token: "type", foreground: "c9a0ff" },
       { token: "identifier", foreground: "e8eef6" },
+      { token: "", foreground: "e8eef6" },
     ],
     colors: {
       "editor.background": "#0b1018",

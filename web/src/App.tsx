@@ -11,6 +11,7 @@ import {
   executeRql,
   explainRql,
   formatError,
+  isApiError,
   getCollection,
   listCollections,
   scrollPoints,
@@ -233,6 +234,13 @@ export default function App() {
       setExplainText(null);
     } catch (err) {
       setHits(null);
+      setTimingMs(null);
+      setRequest(null);
+      setNotes([]);
+      setEmitJson(null);
+      setExplainText(null);
+      if (isApiError(err) && err.logical) setLogical(err.logical);
+      if (isApiError(err) && err.physical) setPhysical(err.physical);
       setResultError(formatError(err));
     } finally {
       setBusy(false);

@@ -1,4 +1,4 @@
-import Editor, { type OnMount } from "@monaco-editor/react";
+import Editor, { type BeforeMount, type OnMount } from "@monaco-editor/react";
 import { useMemo } from "react";
 import { diagnoseRql } from "../lib/rqlParse";
 import { SNIPPETS } from "../lib/snippets";
@@ -35,8 +35,14 @@ export function QueryEditor({
 }: Props) {
   const diagnosis = useMemo(() => diagnoseRql(value), [value]);
 
+  const beforeMount: BeforeMount = (monaco) => {
+    registerRqlLanguage(monaco);
+    monaco.editor.setTheme("rql-ink");
+  };
+
   const handleMount: OnMount = (editor, monaco) => {
     registerRqlLanguage(monaco);
+    monaco.editor.setTheme("rql-ink");
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => onExecute());
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyE, () => onExplain());
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyM, () => onEmit());
@@ -83,6 +89,7 @@ export function QueryEditor({
           theme="rql-ink"
           value={value}
           onChange={(v) => onChange(v ?? "")}
+          beforeMount={beforeMount}
           onMount={handleMount}
           options={{
             minimap: { enabled: false },

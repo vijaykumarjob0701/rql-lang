@@ -48,6 +48,8 @@ export type ApiError = {
   error: string;
   name: string;
   status: number;
+  logical?: Record<string, unknown>;
+  physical?: Record<string, unknown>;
 };
 
 function connHeaders(conn: Connection): Record<string, string> {
@@ -70,8 +72,19 @@ async function readJson(res: Response): Promise<unknown> {
 
 function asError(body: unknown, status: number): ApiError {
   if (body && typeof body === "object" && "error" in body) {
-    const b = body as { error: unknown; name?: unknown };
-    return { error: String(b.error), name: String(b.name || "Error"), status };
+    const b = body as {
+      error: unknown;
+      name?: unknown;
+      logical?: Record<string, unknown>;
+      physical?: Record<string, unknown>;
+    };
+    return {
+      error: String(b.error),
+      name: String(b.name || "Error"),
+      status,
+      logical: b.logical,
+      physical: b.physical,
+    };
   }
   if (body && typeof body === "object" && "status" in body) {
     const b = body as { status?: { error?: string }; result?: { status?: { error?: string } } };
