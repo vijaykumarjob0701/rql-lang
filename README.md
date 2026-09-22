@@ -29,6 +29,25 @@ rql-lang/
   docs/          API.md, ROADMAP.md
 ```
 
+## CLI (SQL-terminal style)
+
+Python is the primary CLI (like `psql` / `sqlite3`):
+
+```bash
+pip install -e "./python[dev]"
+rql --help
+python -m rql                          # interactive rql>
+rql -c "RETRIEVE chunks SEARCH DENSE ON embedding CANDIDATES 5 VECTOR_REF \$q_dense;"
+rql examples/02-filtered-dense.rql     # explain (pretty text)
+rql --json examples/01-hybrid-rrf.rql
+rql --emit examples/01-hybrid-rrf.rql  # sketch, notExecuted
+# rql --execute --vector '{"dense":[...]}' examples/02-filtered-dense.rql
+```
+
+In the REPL: `\help`, `\profile qdrant`, `\emit` / `\execute`, `\connect http://localhost:6333`, `\q`. Default is explain; `--execute` / `\execute` needs real `--vector` / `--vectors-file` JSON (no fake embeddings).
+
+JS one-shot (after `cd javascript && npm run build`): `node dist/cli.js --help` or the `rql` bin. No JS REPL yet — use `python -m rql`.
+
 ## Install locally
 
 ### Python

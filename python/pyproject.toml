@@ -24,6 +24,9 @@ dependencies = []
 dev = ["pytest>=7", "jsonschema>=4"]
 validate = ["jsonschema>=4"]
 
+[project.scripts]
+rql = "rql.cli:main"
+
 [project.urls]
 Research = "https://github.com/vijaykumarjob0701/rql-rag-query-language"
 Repro = "https://github.com/vijaykumarjob0701/rql-repro"

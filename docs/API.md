@@ -84,6 +84,41 @@ Opt-in live run. v0.1 implements **Qdrant only**.
 
 See `examples/qdrant_live_execute.py` and `examples/qdrant_live_execute.mjs`. Live CI is not required: unit tests mock HTTP. Optional smoke (`python/tests/test_qdrant_live.py`, `javascript/tests/qdrant.live.test.ts`) runs only when `QDRANT_URL` is set.
 
+## CLI
+
+Python is the first-class terminal (psql / sqlite3 style). After `pip install -e ./python`:
+
+```bash
+rql --help
+python -m rql                     # REPL: prompt rql>
+rql -c "RETRIEVE chunks SEARCH DENSE ON embedding CANDIDATES 5 VECTOR_REF \$q_dense;"
+rql examples/02-filtered-dense.rql
+rql --json examples/01-hybrid-rrf.rql
+rql --emit examples/01-hybrid-rrf.rql
+# live Qdrant only when asked; vectors are never invented:
+rql --execute --vector '{"dense":[0.1,0.2,0.3,0.4]}' examples/02-filtered-dense.rql
+```
+
+Default one-shot / REPL mode is **explain** (pretty text). `--json` prints a machine-readable object with `logical`, `physical`, `explain`, and optionally `emit` / `execute`.
+
+| Flag / meta | Role |
+|-------------|------|
+| `-c` / file | One-shot (like `psql -c` / `sqlite3 file.sql`) |
+| no args | Interactive `rql>` — multi-line until `;` or a blank line |
+| `\q` `\quit` `\exit` | Leave the REPL |
+| `\help` `\h` `\?` `\d` | Help (`\d` also prints session status) |
+| `\profile qdrant` | Capability profile |
+| `\backend qdrant` | emit/execute vendor |
+| `\connect URL` | Qdrant URL (`QDRANT_URL` otherwise) |
+| `\explain [on\|off]` | Bare = explain mode; on/off = also print explain before emit/execute |
+| `\emit` / `\execute` | Mode toggle. execute needs `\vectors` / `--vector` |
+| `\vectors JSON\|PATH` | Bind dense/sparse vectors (no embed step) |
+| `--execute` | Opt-in live Qdrant only |
+
+A leading `EXPLAIN …` is handled by the CLI (the parser still rejects `EXPLAIN` as an RQL keyword) and forces explain output.
+
+**JavaScript** ships a thin one-shot bin (`npx --prefix javascript rql`, or `node javascript/dist/cli.js` after `npm run build`): `-c`, file, `--json`, `--emit`, `--execute`. No REPL — use `python -m rql`.
+
 ## Profiles
 
 Docs-derived capability flags (not live probes), bundled as JSON:

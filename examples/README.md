@@ -29,3 +29,10 @@ cd javascript && npm test
 ```
 
 `execute` binds caller-supplied vectors (`dense` / `sparse`). It does not embed query text. Late-interaction example `03-late.rql` is expected to raise `ExecutionError` (fail-closed).
+
+The same files work with the CLI:
+
+```bash
+rql examples/02-filtered-dense.rql
+rql --emit examples/01-hybrid-rrf.rql
+```

@@ -17,6 +17,18 @@ npm test
 
 **Not published to npm yet.** Package is marked `"private": true`.
 
+## CLI (one-shot)
+
+After `npm run build`, `package.json` exposes a `rql` bin:
+
+```bash
+node dist/cli.js --help
+node dist/cli.js -c "RETRIEVE chunks SEARCH DENSE ON embedding CANDIDATES 5 VECTOR_REF \$q_dense;"
+node dist/cli.js ../examples/02-filtered-dense.rql
+```
+
+Interactive REPL is **Python-first** (`python -m rql`). This bin is `-c` / file / `--json` / `--emit` / `--execute` only.
+
 ## Quick start
 
 ```ts

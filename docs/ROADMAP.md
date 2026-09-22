@@ -8,6 +8,8 @@
 - [x] Capability profiles: qdrant, elasticsearch, pgvector
 - [x] Emit **sketches** only + pluggable adapter interface
 - [x] First **live** adapter: opt-in Qdrant `execute()` (mocked HTTP in CI; optional `QDRANT_URL` smoke)
+- [x] Python CLI (`rql` / `python -m rql`): one-shot, REPL, meta-commands
+- [x] Thin JS one-shot bin (`rql` via `package.json` bin); full REPL remains Python-first
 
 ## v0.2 — hybrid & honesty
 
@@ -16,6 +18,7 @@
 - [ ] Client shim fusion with explicit ACL-safety notes
 - [ ] Optional jsonschema validation helpers in both languages
 - [ ] Richer `explain` (cost/capability annotations without inventing latency numbers)
+- [ ] JS interactive REPL parity with `python -m rql`
 
 ## v0.3+
 

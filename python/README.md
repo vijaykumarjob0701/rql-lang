@@ -18,7 +18,19 @@ Or:
 cd python && pip install -e ".[dev]"
 ```
 
-**Not published to PyPI yet.**
+**Not published to PyPI yet.** The install registers a `rql` console script.
+
+## CLI
+
+```bash
+rql --help
+python -m rql                    # REPL
+rql -c "RETRIEVE chunks SEARCH DENSE ON embedding CANDIDATES 5 VECTOR_REF \$q_dense;"
+rql ../examples/02-filtered-dense.rql
+rql --emit --json ../examples/01-hybrid-rrf.rql
+```
+
+REPL meta-commands: `\help`, `\d`, `\profile`, `\backend`, `\connect`, `\emit`, `\execute`, `\vectors`, `\q`. Same pipeline as the library. `--execute` requires `--vector` / `--vectors-file`.
 
 ## Quick start
 
