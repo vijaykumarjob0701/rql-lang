@@ -24,8 +24,19 @@ rql-lang/
   examples/      shared .rql toys
   python/        package name: rql
   javascript/    package name: @vijaykumarjob0701/rql
+  web/           RQL Studio (Vite + React) — browse Qdrant, write/execute RQL
   docs/          API.md, ROADMAP.md
 ```
+
+## RQL Studio
+
+Local developer console: connect to Qdrant, browse collections, project a vector sample, and run `parse` / `compile` / `explain` / `emit` from the JS package. Live execute is a thin Studio proxy (library `execute()` is not on `main` yet).
+
+```bash
+cd web && npm install && npm run dev
+```
+
+Optional: `docker run --rm -p 6333:6333 qdrant/qdrant` then `cd web && npm run seed`. Full notes and screenshots: [`web/README.md`](web/README.md).
 
 ## Install locally
 

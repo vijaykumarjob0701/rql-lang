@@ -1,0 +1,40 @@
+{
+  "name": "@vijaykumarjob0701/rql-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RQL Studio — browse Qdrant and write/execute RQL",
+  "type": "module",
+  "scripts": {
+    "predev": "npm run build --prefix ../javascript",
+    "dev": "vite",
+    "build": "npm run build --prefix ../javascript && tsc -p tsconfig.app.json --noEmit && vite build",
+    "preview": "vite preview",
+    "pretest": "npm run build --prefix ../javascript",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed": "node scripts/seed.mjs",
+    "mock-qdrant": "node scripts/mock-qdrant.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@vijaykumarjob0701/rql": "file:../javascript",
+    "monaco-editor": "^0.52.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^20.14.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.5.0",
+    "vite": "^6.3.5",
+    "vitest": "^3.2.4"
+  }
+}
