@@ -111,3 +111,11 @@ export function preferCollection(
 }
 
 export const COLLECTION_POLL_MS = 5000;
+export const COLLECTION_VIRTUALIZE_AFTER = 100;
+
+export function filterCollections<T extends { name: string }>(items: T[], query: string): T[] {
+  const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
+  const q = query.trim().toLowerCase();
+  if (!q) return sorted;
+  return sorted.filter((c) => c.name.toLowerCase().includes(q));
+}

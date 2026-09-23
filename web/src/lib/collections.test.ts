@@ -3,6 +3,7 @@ import { COLLECTION_NAMES, COLLECTION_SPECS, generateAllCollections } from "../.
 import {
   QDRANT_COLLECTION_NAMES,
   collectionMeta,
+  filterCollections,
   preferCollection,
   retargetRetrieve,
   sortCollectionNames,
@@ -59,6 +60,17 @@ describe("Qdrant demo collections (the product “tables”)", () => {
     }
     expect(recipesForBackend("qdrant", "docs_support")[0]!.rql).toMatch(/RETRIEVE docs_support/);
     expect(recipesForBackend("qdrant", "docs_support")[0]!.rql).toMatch(/tenant_id = 'acme'/);
+  });
+
+  it("filters and sorts collections alphabetically on the client", () => {
+    const rows = [{ name: "studio_demo" }, { name: "logs_ops" }, { name: "docs_legal" }];
+    expect(filterCollections(rows, "").map((r) => r.name)).toEqual([
+      "docs_legal",
+      "logs_ops",
+      "studio_demo",
+    ]);
+    expect(filterCollections(rows, "DOC").map((r) => r.name)).toEqual(["docs_legal"]);
+    expect(filterCollections(rows, "nope")).toEqual([]);
   });
 
   it("keeps the current collection unless it disappeared", () => {

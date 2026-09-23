@@ -49,7 +49,7 @@ In this product a **Qdrant collection** is the table: a named set of points you 
 | `docs_research` | 40 | `topic = research` slice |
 | `logs_ops` | 40 | `topic = ops` slice |
 
-Same payload fields and indexes on every collection (`tenant_id`, `topic`, `clearance`, `lang`, `source`). Named dense `dense` (128-d cosine) + toy `bm25_sparse`. After Connect, the sidebar lists **every** collection from `GET /collections` and refreshes every ~5s (pauses when the tab is hidden). Switching collections scopes Recipes, scroll, Data, Indexes, Visualize, and Execute. No Reconnect needed after seed.
+Same payload fields and indexes on every collection (`tenant_id`, `topic`, `clearance`, `lang`, `source`). Named dense `dense` (128-d cosine) + toy `bm25_sparse`. After Connect, the sidebar lists **every** collection from `GET /collections` (client-side filter + virtualized scroll; no Qdrant pagination) and refreshes every ~5s (pauses when the tab is hidden). Switching collections scopes Recipes, scroll, Data, Indexes, Visualize, and Execute. No Reconnect needed after seed.
 
 ## Collection ops (update / index / delete / query)
 

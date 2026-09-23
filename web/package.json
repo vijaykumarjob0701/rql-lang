@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@tanstack/react-virtual": "^3.14.13",
     "@vijaykumarjob0701/rql": "file:../javascript",
     "monaco-editor": "^0.52.2",
     "pg": "^8.16.3",
