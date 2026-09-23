@@ -24,8 +24,28 @@ rql-lang/
   examples/      shared .rql toys
   python/        package name: rql
   javascript/    package name: @vijaykumarjob0701/rql
+  web/           RQL Studio (Vite + React) — browse Qdrant, write/execute RQL
   docs/          API.md, ROADMAP.md
 ```
+
+## RQL Studio
+
+Local developer console: connect to Qdrant, browse **≥5 seeded collections** (the demo “tables”), run recipe-bound RQL (explain / emit / execute), and manage points/indexes via the Qdrant admin API. Optional Postgres/pgvector is a side path. Live retrieve execute is a thin Studio proxy (library `execute()` is not on `main` yet).
+
+```bash
+# Docker only — no host Node. Studio at http://localhost:8080
+docker compose -f web/docker-compose.yml up --build
+# (or: docker compose up --build from the repo root)
+
+# Dual stack (Qdrant + Postgres/pgvector, ≥5 seeded tables):
+docker compose -f web/docker-compose.pgvector.yml up --build
+# or: docker compose -f web/docker-compose.yml --profile pgvector up --build
+
+# Host Vite against compose Qdrant:
+cd web && npm install && npm run compose && npm run seed && npm run dev
+```
+
+Connect the UI to `http://localhost:6333` (Qdrant) or `postgres://rql:rql@127.0.0.1:5432/rql_studio` (pgvector). Full walkthrough + SQL examples: [`web/README.md`](web/README.md).
 
 ## Install locally
 

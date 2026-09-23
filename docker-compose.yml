@@ -1,0 +1,6 @@
+# Convenience wrapper — same stack as web/docker-compose.yml
+#
+#   docker compose up --build
+#   open http://localhost:8080
+include:
+  - path: web/docker-compose.yml
