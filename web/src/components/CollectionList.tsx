@@ -1,4 +1,5 @@
 import type { CollectionInfo } from "../lib/api";
+import { QDRANT_COLLECTION_NAMES, collectionMeta } from "../lib/collections";
 
 type Props = {
   items: CollectionInfo[];
@@ -57,7 +58,9 @@ export function CollectionList({
               <div className="meta">
                 {c.pointsCount == null ? "count unknown" : `${c.pointsCount} ${itemNoun}`}
                 {" · "}
-                {vectorSummary(c.vectors)}
+                {QDRANT_COLLECTION_NAMES.includes(c.name)
+                  ? collectionMeta(c.name).purpose
+                  : vectorSummary(c.vectors)}
               </div>
             </button>
           ))

@@ -17,5 +17,6 @@
     "resolveJsonModule": true,
     "types": ["vitest/globals"]
   },
-  "include": ["src", "../javascript/src/parser.ts"]
+  "include": ["src", "../javascript/src/parser.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

@@ -145,8 +145,8 @@ export function VectorPlot({ points, loading, error }: Props) {
         <div className="empty">
           <h3>Nothing to project</h3>
           <p>
-            Scroll returned no dense vectors. Seed <code>studio_demo</code> or pick a collection that
-            stores vectors.
+            Scroll returned no dense vectors. Seed the demo collections (studio_demo, docs_*,
+            logs_ops) or pick a collection that stores vectors.
           </p>
         </div>
       ) : (

@@ -1,6 +1,6 @@
 # RQL Studio
 
-Polished local console for browsing **Qdrant** or **Postgres/pgvector** and writing **RQL** on top of it — plus admin Data / Indexes / Health / SQL panels for an end-to-end demo.
+Polished local console for browsing a **Qdrant** instance (collections ≈ tables) and writing **RQL** on top of it — plus admin Data / Indexes / Health panels. An optional Postgres/pgvector path exists; it is **not** the demo “5 tables” answer.
 
 ```
 parse → compile → explain / emit     (library: @vijaykumarjob0701/rql)
@@ -36,9 +36,75 @@ docker compose -f web/docker-compose.yml down -v
 
 Optional env (compose file): `QDRANT_API_KEY`, `QDRANT_INTERNAL_URL` (default `http://qdrant:6333`), `STUDIO_PORT` (host port, default `8080`).
 
-## pgvector demo
+## Collections ≈ tables
 
-Postgres + the `vector` extension coexist with Qdrant. Either command:
+In this product a **Qdrant collection** is the table: a named set of points you list, index, upsert, delete, and query. Seed creates **six** collections (not SQL tables):
+
+| Collection | Purpose | Typical payload | Seed indexes |
+|---|---|---|---|
+| `studio_demo` | General mixed corpus + ACL | `tenant_id`, `clearance`, `topic`, `title` | tenant_id, topic, clearance, lang, source |
+| `docs_support` | Support tickets | `queue`, `priority`, `status`, `customer` | queue, priority, status |
+| `docs_legal` | Legal memos | `jurisdiction`, `privilege`, `matter` | jurisdiction, privilege, matter |
+| `docs_product` | Product specs | `product_line`, `stage`, `sku` | product_line, stage |
+| `docs_research` | Research papers | `venue`, `year`, `author` | venue, year |
+| `logs_ops` | Ops event log | `service`, `level`, `env` | service, level, env |
+
+Each collection has enough points to query, its own payload shape, and 128-d named vector `dense` plus toy `bm25_sparse`. Switching the sidebar **Collections** list retargets Recipes, scroll, Data, Indexes, Visualize, and Execute.
+
+## Collection ops (update / index / delete / query)
+
+These are **Qdrant REST** (admin API), not RQL. Use the **Data**, **Indexes**, and **Query** tabs on the selected collection, or copy the HTTP.
+
+Replace `COLLECTION` with e.g. `docs_support`. Studio’s proxy path is `/api/qdrant` + the same suffix.
+
+**Update / upsert a point** — Data tab → edit a row or New point → **Upsert**.
+
+```http
+PUT /collections/COLLECTION/points?wait=true
+{
+  "points": [{
+    "id": 999,
+    "vector": { "dense": [<128 floats>] },
+    "payload": { "title": "studio upsert" }
+  }]
+}
+```
+
+**Get / create payload indexes** — Indexes tab lists seed indexes; create a field or delete one.
+
+```http
+PUT /collections/COLLECTION/index?wait=true
+{ "field_name": "year", "field_schema": "integer" }
+
+GET /collections/COLLECTION
+```
+
+**Delete a point** — Data tab → **Delete id**.
+
+```http
+POST /collections/COLLECTION/points/delete?wait=true
+{ "points": [999] }
+```
+
+**Run a query** — select the collection → pick a Recipe (stored demo vector) → **Execute**. That POSTs the Query API for the selected collection.
+
+```http
+POST /collections/COLLECTION/points/query
+{
+  "query": [<128 floats>],
+  "using": "dense",
+  "limit": 8,
+  "with_payload": true
+}
+```
+
+Recipes auto-bind stored demo vectors. Studio will not invent an embedding of the QUERY text.
+
+## Optional: pgvector demo
+
+Side path only — **not** the answer to “≥5 tables.” Those are the Qdrant collections above. Postgres + the `vector` extension can coexist with Qdrant if you want SQL sketches.
+
+Either command:
 
 ```bash
 # dedicated dual-stack file (Qdrant + Postgres + both seeds + Studio)
@@ -182,22 +248,18 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Connect with URL `http://12
 
 ### 2. What seed creates
 
-Collection `studio_demo`:
+**Six Qdrant collections** (the demo tables). `studio_demo` is the mixed ACL corpus (120 points). The others (`docs_support`, `docs_legal`, `docs_product`, `docs_research`, `logs_ops`) have distinct payload shapes and ≥32 points each. All share named dense `dense` (128-d cosine) and toy sparse `bm25_sparse` (**not** a real BM25 analyzer). Stored demo query vectors go to `src/lib/demo-query-vectors.json` (labeled as such).
 
-- 120 points, 5 topics (`research`, `support`, `legal`, `product`, `ops`)
-- Tenants `acme` / `globex` / `initech`, clearance 1–5, plus `title`, `lang`, `source`, `year`
-- Named dense vector `dense` (128-d cosine) and sparse `bm25_sparse` (toy token ids — **not** a real BM25 analyzer)
-- Payload indexes: `tenant_id`, `topic`, `clearance`, `lang`, `source`
-- Stored demo query vectors written to `src/lib/demo-query-vectors.json` (labeled as such)
+`npm run mock-qdrant` also creates all six in-memory (no extra seed required). `npm run seed` against Docker Qdrant or the mock recreates them.
 
 ### 3. Try recipes (first-click Execute)
 
 Sidebar **Recipes** load RQL **and** matching stored demo vectors. You do not need the Demo random vector button for these.
 
-1. **Filtered dense + ACL** — already selected on first load. Click **Execute**. Hits should be `tenant_id=acme` and `clearance >= 2`.
-2. **Dense only** — unfiltered support centroid.
-3. **Globex tenant filter** — ACL-style tenant swap.
-4. **Product topic** — payload `topic = 'product'`.
+1. **Filtered dense** — already selected on `studio_demo`. Click **Execute**. Hits follow that collection’s payload filter (`tenant_id=acme` and `clearance >= 2` here).
+2. Switch to **docs_support** (or any other collection). Recipes retarget `RETRIEVE` and the filter (e.g. `queue = 'billing'`). Execute again.
+3. **Dense only** — unfiltered neighbors in the selected collection.
+4. **Alternate filter** — second payload predicate for that collection.
 5. **Hybrid RRF** — binds a stored sparse `{indices,values}`. Works on real Qdrant and on mock-qdrant’s toy RRF.
 6. **Late / ColBERT** and **Linear fusion** — Explain/Emit work; Execute **fail-closes** (no silent dense substitute).
 
@@ -270,7 +332,7 @@ Captured against the seeded mock (`npm run mock-qdrant && npm run seed`).
 npm test
 ```
 
-Covers editor → library parse, demo recipe bindings, admin helpers, PCA, storage, execute fail-closed / mocked HTTP, pgvector schema (≥5 tables) + SQL examples + execute/admin helpers.
+Covers editor → library parse, ≥5 Qdrant collections + recipe retargeting, admin helpers, PCA, storage, execute fail-closed / mocked HTTP. Optional pgvector helpers stay covered too.
 
 ## Layout
 

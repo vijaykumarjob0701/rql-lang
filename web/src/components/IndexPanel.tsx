@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { PayloadIndex } from "../lib/api";
 
 const SCHEMAS = ["keyword", "integer", "float", "bool", "text", "uuid"];
@@ -13,6 +13,7 @@ export function IndexPanel({
   createLabel = "Create payload index",
   hideDelete = false,
   simpleCreate = false,
+  ops,
 }: {
   indexes: PayloadIndex[];
   busy: boolean;
@@ -23,6 +24,7 @@ export function IndexPanel({
   simpleCreate?: boolean;
   onCreate: (field: string, schema: string) => Promise<void>;
   onDelete: (field: string) => Promise<void>;
+  ops?: ReactNode;
 }) {
   const [field, setField] = useState("year");
   const [schema, setSchema] = useState("integer");
@@ -32,6 +34,7 @@ export function IndexPanel({
         {disclaimer ??
           "Payload indexes are Qdrant admin API (`PUT/DELETE /collections/…/index`), not RQL."}
       </div>
+      {ops}
       {error ? <div className="banner err">{error}</div> : null}
       <div className="card" style={{ marginBottom: 12 }}>
         <h4>{createLabel}</h4>

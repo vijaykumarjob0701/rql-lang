@@ -1,3 +1,4 @@
+import { collectionMeta, retargetRetrieve } from "./collections";
 import stored from "./demo-query-vectors.json";
 
 export type SparseVector = { indices: number[]; values: number[] };
@@ -24,92 +25,85 @@ export function storedSparse(): SparseVector {
   return stored.sparse.portable_retrieval;
 }
 
-export const DEMO_RECIPES: DemoRecipe[] = [
-  {
-    id: "filtered-dense",
-    title: "Filtered dense + ACL",
-    blurb: "AnnExec + PRE filter. First-click Execute uses a stored research centroid.",
-    kind: "dense",
-    denseTopic: "research",
-    rql: `RETRIEVE studio_demo
-  SEARCH DENSE ON embedding METRIC cosine CANDIDATES 20 VECTOR_REF $q_dense
-  WHERE tenant_id = 'acme' AND clearance >= 2
-  ACL_HARD;
-`,
-  },
-  {
-    id: "dense-only",
-    title: "Dense only",
-    blurb: "Unfiltered nearest neighbors against the support centroid.",
-    kind: "dense",
-    denseTopic: "support",
-    rql: `RETRIEVE studio_demo
-  SEARCH DENSE ON embedding METRIC cosine CANDIDATES 12 VECTOR_REF $q_dense;
-`,
-  },
-  {
-    id: "tenant-globex",
-    title: "Globex tenant filter",
-    blurb: "Same ANN, different ACL-style tenant.",
-    kind: "dense",
-    denseTopic: "legal",
-    rql: `RETRIEVE studio_demo
-  SEARCH DENSE ON embedding METRIC cosine CANDIDATES 15 VECTOR_REF $q_dense
-  WHERE tenant_id = 'globex' AND clearance >= 1
-  ACL_HARD;
-`,
-  },
-  {
-    id: "topic-product",
-    title: "Product topic",
-    blurb: "Filter on payload topic=product with the product centroid.",
-    kind: "dense",
-    denseTopic: "product",
-    rql: `RETRIEVE studio_demo
-  SEARCH DENSE ON embedding METRIC cosine CANDIDATES 16 VECTOR_REF $q_dense
-  WHERE topic = 'product';
-`,
-  },
-  {
-    id: "hybrid-rrf",
-    title: "Hybrid RRF",
-    blurb: "Dense + sparse prefetch. Execute binds a stored sparse {indices,values}.",
-    kind: "hybrid",
-    denseTopic: "research",
-    usesSparse: true,
-    rql: `RETRIEVE studio_demo
+function denseSearch(collection: string, k: number, where?: string, acl = false): string {
+  const filter = where
+    ? `\n  WHERE ${where}${acl ? "\n  ACL_HARD" : ""};`
+    : ";";
+  return `RETRIEVE ${collection}
+  SEARCH DENSE ON embedding METRIC cosine CANDIDATES ${k} VECTOR_REF $q_dense${filter}
+`;
+}
+
+export function buildQdrantRecipes(collection = "studio_demo"): DemoRecipe[] {
+  const meta = collectionMeta(collection);
+  return [
+    {
+      id: "filtered-dense",
+      title: "Filtered dense",
+      blurb: `AnnExec + filter on ${meta.name}. First-click Execute uses a stored ${meta.denseTopic} centroid.`,
+      kind: "dense",
+      denseTopic: meta.denseTopic,
+      rql: denseSearch(meta.name, 20, meta.filter, meta.name === "studio_demo"),
+    },
+    {
+      id: "dense-only",
+      title: "Dense only",
+      blurb: `Unfiltered nearest neighbors in ${meta.name}.`,
+      kind: "dense",
+      denseTopic: meta.denseTopic,
+      rql: denseSearch(meta.name, 12),
+    },
+    {
+      id: "alt-filter",
+      title: meta.altTitle,
+      blurb: `Same ANN on ${meta.name} with a different payload predicate.`,
+      kind: "dense",
+      denseTopic: meta.altTopic,
+      rql: denseSearch(meta.name, 15, meta.altFilter, meta.name === "studio_demo"),
+    },
+    {
+      id: "hybrid-rrf",
+      title: "Hybrid RRF",
+      blurb: "Dense + sparse prefetch. Execute binds a stored sparse {indices,values}.",
+      kind: "hybrid",
+      denseTopic: meta.denseTopic,
+      usesSparse: true,
+      rql: `RETRIEVE ${meta.name}
   SEARCH
     DENSE ON embedding METRIC cosine CANDIDATES 50 VECTOR_REF $q_dense
     AND BM25 ON content CANDIDATES 50 QUERY 'portable retrieval IR for RAG'
   FUSE RRF K 60;
 `,
-  },
-  {
-    id: "late",
-    title: "Late / ColBERT (fail-closed)",
-    blurb: "Compiles; execute refuses — no silent dense substitute.",
-    kind: "fail-closed",
-    denseTopic: "research",
-    rql: `RETRIEVE studio_demo
+    },
+    {
+      id: "late",
+      title: "Late / ColBERT (fail-closed)",
+      blurb: "Compiles; execute refuses — no silent dense substitute.",
+      kind: "fail-closed",
+      denseTopic: meta.denseTopic,
+      rql: `RETRIEVE ${meta.name}
   SEARCH LATE ON token_vectors CANDIDATES 10 VECTOR_REF $q_tok;
 `,
-  },
-  {
-    id: "linear",
-    title: "Linear fusion (fail-closed)",
-    blurb: "FusionExec family=linear is not representable on Studio execute.",
-    kind: "fail-closed",
-    denseTopic: "ops",
-    rql: `RETRIEVE studio_demo
+    },
+    {
+      id: "linear",
+      title: "Linear fusion (fail-closed)",
+      blurb: "FusionExec family=linear is not representable on Studio execute.",
+      kind: "fail-closed",
+      denseTopic: meta.altTopic,
+      rql: `RETRIEVE ${meta.name}
   SEARCH
     DENSE ON embedding METRIC cosine CANDIDATES 30 VECTOR_REF $q_dense
     AND BM25 ON description CANDIDATES 30 QUERY 'electronics deals'
-  WHERE tenant_id = 'acme'
+  WHERE ${meta.filter}
   FUSE LINEAR WEIGHTS (0.5, 0.5)
   LIMIT 12;
 `,
-  },
-];
+    },
+  ];
+}
+
+export const DEMO_RECIPES: DemoRecipe[] = buildQdrantRecipes("studio_demo");
 
 export const PG_RECIPES: DemoRecipe[] = [
   {
@@ -195,13 +189,22 @@ export const ALL_RECIPES: DemoRecipe[] = [...DEMO_RECIPES, ...PG_RECIPES];
 export const DEFAULT_RECIPE = DEMO_RECIPES[0]!;
 export const DEFAULT_PG_RECIPE = PG_RECIPES[0]!;
 
-export function recipesForBackend(backend: "qdrant" | "pgvector"): DemoRecipe[] {
-  return ALL_RECIPES.filter((r) => (r.backend ?? "qdrant") === backend);
+export function recipesForBackend(
+  backend: "qdrant" | "pgvector",
+  collection = "studio_demo",
+): DemoRecipe[] {
+  if (backend === "pgvector") return PG_RECIPES;
+  return buildQdrantRecipes(collection);
 }
 
-export function defaultRecipeFor(backend: "qdrant" | "pgvector"): DemoRecipe {
-  return recipesForBackend(backend)[0]!;
+export function defaultRecipeFor(
+  backend: "qdrant" | "pgvector",
+  collection = "studio_demo",
+): DemoRecipe {
+  return recipesForBackend(backend, collection)[0]!;
 }
+
+export { retargetRetrieve };
 
 export function recipeBindings(recipe: DemoRecipe): {
   dense: number[] | null;

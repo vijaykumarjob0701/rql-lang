@@ -428,6 +428,11 @@ kbd {
   padding: 10px;
 }
 .card h4 { margin: 0 0 6px; font-size: 13px; }
+details.card summary {
+  cursor: pointer;
+  font-weight: 560;
+  font-size: 13px;
+}
 .muted { color: var(--muted); }
 .faint { color: var(--faint); }
 

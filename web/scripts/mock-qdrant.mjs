@@ -5,9 +5,26 @@
  * (dense + toy RRF), payload indexes, and health/cluster.
  */
 import { createServer } from "node:http";
+import { collectionBody, generateAllCollections } from "./demo-data.mjs";
 
 const PORT = Number(process.env.QDRANT_PORT || 6333);
 const store = new Map();
+
+function seedDemoCollections() {
+  const body = collectionBody();
+  for (const bundle of generateAllCollections()) {
+    store.set(bundle.name, {
+      vectors: body.vectors,
+      sparseVectors: body.sparse_vectors || {},
+      points: bundle.points,
+      indexes: Object.fromEntries(
+        bundle.indexes.map(([field, schema]) => [field, { data_type: schema }]),
+      ),
+    });
+  }
+}
+
+seedDemoCollections();
 
 function send(res, status, body, contentType = "application/json") {
   if (typeof body === "string") {
@@ -335,4 +352,5 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`mock-qdrant listening on http://127.0.0.1:${PORT} (in-memory, not real Qdrant)`);
+  console.log(`  seeded ${store.size} collections: ${[...store.keys()].join(", ")}`);
 });

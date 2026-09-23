@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { ScrollPoint } from "../lib/api";
 import { storedDense } from "../lib/demoVectors";
 import { extractDenseVector } from "../lib/pca";
@@ -36,6 +36,7 @@ export function DataPanel({
   onUpsert,
   onDelete,
   disclaimer,
+  ops,
 }: {
   points: ScrollPoint[];
   loading: boolean;
@@ -49,6 +50,7 @@ export function DataPanel({
     dense: number[];
   }) => Promise<void>;
   onDelete: (id: string | number) => Promise<void>;
+  ops?: ReactNode;
 }) {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [formError, setFormError] = useState<string | null>(null);
@@ -128,8 +130,9 @@ export function DataPanel({
     <div className="pane-body">
       <div className="banner warn">
         {disclaimer ??
-          "Qdrant admin API via the Studio proxy — not RQL. Writes are PUT /points and POST /points/delete."}
+          "Qdrant admin API via the Studio proxy — not RQL. Writes are PUT /points and POST /points/delete. The selected collection is the demo \"table\"."}
       </div>
+      {ops}
       {error ? <div className="banner err">{error}</div> : null}
       {formError ? <div className="banner err">{formError}</div> : null}
       <div className="row" style={{ marginBottom: 10 }}>

@@ -9,6 +9,7 @@ import { QueryEditor } from "./components/QueryEditor";
 import { RecipeList } from "./components/RecipeList";
 import { ResultsPanel } from "./components/ResultsPanel";
 import { SchemaPanel } from "./components/SchemaPanel";
+import { QdrantExamples } from "./components/QdrantExamples";
 import { SqlExamples } from "./components/SqlExamples";
 import { VectorPlot } from "./components/VectorPlot";
 import {
@@ -43,8 +44,10 @@ import {
   DEMO_VECTOR_LABEL,
   recipeBindings,
   recipesForBackend,
+  retargetRetrieve,
   type DemoRecipe,
 } from "./lib/demoVectors";
+import { sortCollectionNames } from "./lib/collections";
 import type { PgExample } from "./lib/pgExamples";
 import { loadConnection, saveConnection, type Connection } from "./lib/storage";
 
@@ -128,7 +131,7 @@ export default function App() {
   const [sqlError, setSqlError] = useState<string | null>(null);
 
   const backend = conn.backend ?? "qdrant";
-  const recipes = recipesForBackend(backend);
+  const recipes = recipesForBackend(backend, selected ?? "studio_demo");
   const profile = backend === "pgvector" ? "pgvector" : "qdrant";
 
   const selectedInfo = useMemo(
@@ -229,9 +232,13 @@ export default function App() {
             }
           }),
         );
-        setCollections(details);
+        const order = sortCollectionNames(details.map((d) => d.name));
+        const sorted = order
+          .map((name) => details.find((d) => d.name === name))
+          .filter((d): d is CollectionInfo => Boolean(d));
+        setCollections(sorted);
         setConnected(true);
-        const prefer = details.find((c) => c.name === "studio_demo") ?? details[0];
+        const prefer = sorted.find((c) => c.name === "studio_demo") ?? sorted[0];
         setSelected(prefer?.name ?? null);
       }
     } catch (err) {
@@ -272,7 +279,7 @@ export default function App() {
     if (tab === "health" && connected) void loadHealth();
   }, [tab, connected, loadHealth]);
 
-  function loadRecipe(recipe: DemoRecipe) {
+  function applyRecipe(recipe: DemoRecipe, jumpToQuery: boolean) {
     const next = applyRecipeVectors(recipe);
     setRecipeId(recipe.id);
     setRql(recipe.rql);
@@ -281,7 +288,24 @@ export default function App() {
     setDemoUsed(false);
     setStoredDemo(Boolean(next.dense));
     setVectorNote(next.dense ? DEMO_VECTOR_LABEL : null);
-    setTab("query");
+    if (jumpToQuery) setTab("query");
+  }
+
+  function loadRecipe(recipe: DemoRecipe) {
+    applyRecipe(recipe, true);
+  }
+
+  function selectCollection(name: string) {
+    setSelected(name);
+    if (backend !== "qdrant") return;
+    if (recipeId) {
+      const scoped = recipesForBackend("qdrant", name).find((r) => r.id === recipeId);
+      if (scoped) {
+        applyRecipe(scoped, false);
+        return;
+      }
+    }
+    setRql((current) => retargetRetrieve(current, name));
   }
 
   useEffect(() => {
@@ -536,7 +560,7 @@ export default function App() {
           <div className="mark">R</div>
           <div>
             <h1>RQL Studio</h1>
-            <p>Qdrant / pgvector explorer + retrieval query language</p>
+            <p>Qdrant collections explorer + retrieval query language</p>
           </div>
         </div>
         <div className="top-meta">
@@ -576,14 +600,14 @@ export default function App() {
           <CollectionList
             items={collections}
             selected={selected}
-            onSelect={setSelected}
+            onSelect={selectCollection}
             title={backend === "pgvector" ? "Tables" : "Collections"}
             itemNoun={backend === "pgvector" ? "rows" : "points"}
             emptyHint={
               connected
                 ? backend === "pgvector"
                   ? "No demo tables. docker compose -f web/docker-compose.pgvector.yml up --build"
-                  : "No collections. From the repo: docker compose -f web/docker-compose.yml up --build"
+                  : "No collections. Seed creates six (studio_demo + docs_* + logs_ops): docker compose -f web/docker-compose.yml up --build"
                 : backend === "pgvector"
                   ? "Connect with postgres://rql:rql@127.0.0.1:5432/rql_studio"
                   : "Connect to list collections. Default is http://127.0.0.1:6333."
@@ -617,6 +641,7 @@ export default function App() {
               onEmit={() => void runEmit()}
               onExecute={() => void runExecute()}
               busy={busy}
+              collection={selected}
             />
           ) : null}
           {tab === "data" ? (
@@ -630,6 +655,7 @@ export default function App() {
                   ? "Sandboxed demo SQL (UPDATE/DELETE chunks-*) — not RQL. v0.1 RQL is retrieve-only."
                   : undefined
               }
+              ops={backend === "qdrant" ? <QdrantExamples collection={selected} /> : null}
               onRefresh={() => void loadSample()}
               onUpsert={handleUpsert}
               onDelete={handleDelete}
@@ -648,6 +674,7 @@ export default function App() {
               createLabel={backend === "pgvector" ? "Ensure HNSW index" : "Create payload index"}
               hideDelete={backend === "pgvector"}
               simpleCreate={backend === "pgvector"}
+              ops={backend === "qdrant" ? <QdrantExamples collection={selected} /> : null}
               onCreate={handleCreateIndex}
               onDelete={handleDeleteIndex}
             />

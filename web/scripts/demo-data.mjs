@@ -7,6 +7,117 @@ export const NAME = "studio_demo";
 export const SEED = 20260923;
 export const POINT_COUNT = 120;
 
+/**
+ * Qdrant collections in this demo. In this product a collection is the
+ * "table": a named point set you list, index, upsert, delete, and query.
+ */
+export const COLLECTION_SPECS = [
+  {
+    name: "studio_demo",
+    purpose: "General mixed corpus + ACL (tenant_id / clearance)",
+    kind: "mixed",
+    n: 120,
+    colorField: "topic",
+    denseTopic: "research",
+    altTopic: "legal",
+    filter: "tenant_id = 'acme' AND clearance >= 2",
+    altFilter: "tenant_id = 'globex' AND clearance >= 1",
+    altTitle: "Globex tenant filter",
+    indexes: [
+      ["tenant_id", "keyword"],
+      ["topic", "keyword"],
+      ["clearance", "integer"],
+      ["lang", "keyword"],
+      ["source", "keyword"],
+    ],
+  },
+  {
+    name: "docs_support",
+    purpose: "Support tickets (queue / priority / status)",
+    kind: "support",
+    n: 40,
+    colorField: "queue",
+    denseTopic: "support",
+    altTopic: "support",
+    filter: "queue = 'billing' AND priority >= 2",
+    altFilter: "status = 'open'",
+    altTitle: "Open tickets",
+    indexes: [
+      ["queue", "keyword"],
+      ["priority", "integer"],
+      ["status", "keyword"],
+    ],
+  },
+  {
+    name: "docs_legal",
+    purpose: "Legal memos (jurisdiction / privilege / matter)",
+    kind: "legal",
+    n: 32,
+    colorField: "jurisdiction",
+    denseTopic: "legal",
+    altTopic: "legal",
+    filter: "jurisdiction = 'US'",
+    altFilter: "privilege = 'work_product'",
+    altTitle: "Work-product only",
+    indexes: [
+      ["jurisdiction", "keyword"],
+      ["privilege", "keyword"],
+      ["matter", "keyword"],
+    ],
+  },
+  {
+    name: "docs_product",
+    purpose: "Product specs (product_line / stage / sku)",
+    kind: "product",
+    n: 36,
+    colorField: "product_line",
+    denseTopic: "product",
+    altTopic: "product",
+    filter: "product_line = 'search'",
+    altFilter: "stage = 'ga'",
+    altTitle: "GA specs",
+    indexes: [
+      ["product_line", "keyword"],
+      ["stage", "keyword"],
+    ],
+  },
+  {
+    name: "docs_research",
+    purpose: "Research papers (venue / year / author)",
+    kind: "research",
+    n: 40,
+    colorField: "venue",
+    denseTopic: "research",
+    altTopic: "research",
+    filter: "venue = 'SIGIR' AND year >= 2023",
+    altFilter: "venue = 'EMNLP'",
+    altTitle: "EMNLP papers",
+    indexes: [
+      ["venue", "keyword"],
+      ["year", "integer"],
+    ],
+  },
+  {
+    name: "logs_ops",
+    purpose: "Ops event log (service / level / env)",
+    kind: "ops",
+    n: 48,
+    colorField: "level",
+    denseTopic: "ops",
+    altTopic: "ops",
+    filter: "service = 'ingest' AND level = 'error'",
+    altFilter: "env = 'prod'",
+    altTitle: "Prod only",
+    indexes: [
+      ["service", "keyword"],
+      ["level", "keyword"],
+      ["env", "keyword"],
+    ],
+  },
+];
+
+export const COLLECTION_NAMES = COLLECTION_SPECS.map((s) => s.name);
+
 export const TOPICS = ["research", "support", "legal", "product", "ops"];
 export const TENANTS = ["acme", "globex", "initech"];
 export const LANGS = ["en", "de"];
@@ -68,6 +179,110 @@ export function sparseForTopic(topic) {
     indices: [topicId, TOKEN_IDS.retrieval, TOKEN_IDS.rag],
     values: [1.2, 0.35, 0.2],
   };
+}
+
+export function collectionSpec(name) {
+  return COLLECTION_SPECS.find((s) => s.name === name) || COLLECTION_SPECS[0];
+}
+
+function pick(list, idx) {
+  return list[idx % list.length];
+}
+
+export function generateSpecializedPoints(spec, { dim = DIM, seed = SEED } = {}) {
+  const { randn } = makeRng(seed + spec.name.length * 31);
+  const topic = spec.denseTopic;
+  const cluster = Math.max(0, TOPICS.indexOf(topic));
+  const centers = centroids(dim, seed);
+  const center = centers[cluster];
+  const n = spec.n;
+  return Array.from({ length: n }, (_, idx) => {
+    const noise = Array.from({ length: dim }, () => 0.08 * randn());
+    const dense = normalize(center.map((x, j) => x + noise[j]));
+    return {
+      id: idx + 1,
+      vector: { dense, bm25_sparse: sparseForTopic(topic) },
+      payload: specializedPayload(spec.kind, idx),
+    };
+  });
+}
+
+export function specializedPayload(kind, idx) {
+  if (kind === "support") {
+    const queues = ["billing", "auth", "shipping"];
+    const statuses = ["open", "pending", "closed"];
+    return {
+      queue: pick(queues, idx),
+      priority: 1 + (idx % 5),
+      status: pick(statuses, idx),
+      customer: pick(TENANTS, idx),
+      product: pick(["search", "chat", "billing"], idx),
+      title: `ticket ${idx + 1}`,
+    };
+  }
+  if (kind === "legal") {
+    const jurisdictions = ["US", "EU", "UK"];
+    const privileges = ["work_product", "public", "confidential"];
+    const matters = ["alpha", "bravo", "charlie"];
+    return {
+      jurisdiction: pick(jurisdictions, idx),
+      privilege: pick(privileges, idx),
+      matter: pick(matters, idx),
+      counsel: pick(["lee", "nguyen", "okonkwo"], idx),
+      title: `memo ${idx + 1}`,
+    };
+  }
+  if (kind === "product") {
+    const lines = ["search", "chat", "billing"];
+    const stages = ["ga", "beta", "preview"];
+    return {
+      product_line: pick(lines, idx),
+      stage: pick(stages, idx),
+      sku: `SKU-${1000 + idx}`,
+      owner: pick(["dana", "ravi", "kim"], idx),
+      title: `spec ${idx + 1}`,
+    };
+  }
+  if (kind === "research") {
+    const venues = ["SIGIR", "EMNLP", "NeurIPS"];
+    return {
+      venue: pick(venues, idx),
+      year: 2022 + (idx % 4),
+      author: pick(["chen", "alvarez", "berg"], idx),
+      citation_count: (idx * 3) % 40,
+      title: `paper ${idx + 1}`,
+    };
+  }
+  if (kind === "ops") {
+    const services = ["ingest", "query", "index"];
+    const levels = ["error", "warn", "info"];
+    const envs = ["prod", "stage", "dev"];
+    return {
+      service: pick(services, idx),
+      level: pick(levels, idx),
+      env: pick(envs, idx),
+      request_id: `req-${idx + 1}`,
+      title: `event ${idx + 1}`,
+    };
+  }
+  return {
+    topic: pick(TOPICS, idx),
+    tenant_id: pick(TENANTS, idx),
+    clearance: 1 + (idx % 5),
+    title: `note ${idx + 1}`,
+  };
+}
+
+export function generateAllCollections({ dim = DIM, seed = SEED } = {}) {
+  return COLLECTION_SPECS.map((spec) => ({
+    spec,
+    name: spec.name,
+    indexes: spec.indexes,
+    points:
+      spec.kind === "mixed"
+        ? generatePoints({ dim, n: spec.n, seed })
+        : generateSpecializedPoints(spec, { dim, seed }),
+  }));
 }
 
 export function generatePoints({ dim = DIM, n = POINT_COUNT, seed = SEED } = {}) {

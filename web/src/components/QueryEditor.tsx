@@ -19,6 +19,7 @@ type Props = {
   onEmit: () => void;
   onExecute: () => void;
   busy: boolean;
+  collection?: string | null;
 };
 
 export function QueryEditor({
@@ -37,6 +38,7 @@ export function QueryEditor({
   onEmit,
   onExecute,
   busy,
+  collection,
 }: Props) {
   const diagnosis = useMemo(() => diagnoseRql(value), [value]);
 
@@ -56,7 +58,7 @@ export function QueryEditor({
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <div className="pane-head">
-        <span>RQL retrieve</span>
+        <span>RQL retrieve{collection ? ` · ${collection}` : ""}</span>
         <div className="row">
           <button className="btn tiny" type="button" disabled={busy} onClick={onExplain}>
             Explain
@@ -135,6 +137,12 @@ export function QueryEditor({
               onChange={(e) => onSparseText(e.target.value)}
             />
           </div>
+        ) : null}
+        {collection ? (
+          <p className="hint">
+            Execute runs the Qdrant Query API against selected collection <code>{collection}</code>{" "}
+            (the demo &quot;table&quot;). Switching collections retargets Recipes.
+          </p>
         ) : null}
         <p className={`hint ${demoUsed || storedDemo ? "warn" : ""}`}>
           {demoUsed

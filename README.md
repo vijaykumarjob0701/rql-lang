@@ -30,7 +30,7 @@ rql-lang/
 
 ## RQL Studio
 
-Local developer console: connect to Qdrant or Postgres/pgvector, browse collections/tables, run recipe-bound RQL (explain / emit / execute), and manage data via the admin API. Live retrieve execute is a thin Studio proxy (library `execute()` is not on `main` yet).
+Local developer console: connect to Qdrant, browse **≥5 seeded collections** (the demo “tables”), run recipe-bound RQL (explain / emit / execute), and manage points/indexes via the Qdrant admin API. Optional Postgres/pgvector is a side path. Live retrieve execute is a thin Studio proxy (library `execute()` is not on `main` yet).
 
 ```bash
 # Docker only — no host Node. Studio at http://localhost:8080
