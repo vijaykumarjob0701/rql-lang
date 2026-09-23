@@ -212,7 +212,7 @@ export default function App() {
     try {
       if (!vectorText.trim()) {
         throw new Error(
-          "Execute needs a query vector. Paste JSON, upload a file, or click “Demo random vector” (demo-only).",
+          "Execute needs a query vector. Paste JSON, upload a file, or click \"Demo random vector\" (demo-only).",
         );
       }
       const vector = parseVectorJson(vectorText);
