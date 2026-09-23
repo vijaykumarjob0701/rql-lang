@@ -1,7 +1,6 @@
 import Editor, { type BeforeMount, type OnMount } from "@monaco-editor/react";
 import { useMemo } from "react";
 import { diagnoseRql } from "../lib/rqlParse";
-import { SNIPPETS } from "../lib/snippets";
 import { registerRqlLanguage } from "../monaco-rql";
 
 type Props = {
@@ -9,8 +8,11 @@ type Props = {
   onChange: (next: string) => void;
   vectorText: string;
   onVectorText: (next: string) => void;
+  sparseText: string;
+  onSparseText: (next: string) => void;
   vectorNote: string | null;
   demoUsed: boolean;
+  storedDemo: boolean;
   onDemoVector: () => void;
   onUploadVector: (file: File) => void;
   onExplain: () => void;
@@ -24,8 +26,11 @@ export function QueryEditor({
   onChange,
   vectorText,
   onVectorText,
+  sparseText,
+  onSparseText,
   vectorNote,
   demoUsed,
+  storedDemo,
   onDemoVector,
   onUploadVector,
   onExplain,
@@ -51,26 +56,8 @@ export function QueryEditor({
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <div className="pane-head">
-        <span>RQL</span>
+        <span>RQL retrieve</span>
         <div className="row">
-          <select
-            aria-label="Example snippets"
-            defaultValue=""
-            onChange={(e) => {
-              const snip = SNIPPETS.find((s) => s.id === e.target.value);
-              if (snip) onChange(snip.rql);
-              e.target.value = "";
-            }}
-          >
-            <option value="" disabled>
-              Insert example…
-            </option>
-            {SNIPPETS.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.title}
-              </option>
-            ))}
-          </select>
           <button className="btn tiny" type="button" disabled={busy} onClick={onExplain}>
             Explain
           </button>
@@ -137,11 +124,23 @@ export function QueryEditor({
           placeholder='[0.12, -0.03, …]  — required for Execute'
           onChange={(e) => onVectorText(e.target.value)}
         />
-        <p className={`hint ${demoUsed ? "warn" : ""}`}>
+        {sparseText ? (
+          <div className="field" style={{ marginTop: 8 }}>
+            <label htmlFor="query-sparse">Sparse / BM25 binding (stored demo)</label>
+            <textarea
+              id="query-sparse"
+              data-testid="query-sparse"
+              value={sparseText}
+              spellCheck={false}
+              onChange={(e) => onSparseText(e.target.value)}
+            />
+          </div>
+        ) : null}
+        <p className={`hint ${demoUsed || storedDemo ? "warn" : ""}`}>
           {demoUsed
             ? "Demo-only random unit vector — not an embedding of the QUERY text. Do not treat scores as semantic retrieval."
             : vectorNote ||
-              "Execute binds this array to $q_dense. Paste a real embedding, upload JSON, or generate a labeled demo vector."}
+              "Execute binds this array to $q_dense. Recipes auto-fill stored demo vectors. Paste a real embedding to replace them."}
         </p>
       </div>
     </div>

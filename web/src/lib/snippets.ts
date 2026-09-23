@@ -58,4 +58,5 @@ export const SNIPPETS: Snippet[] = [
   },
 ];
 
+export { DEFAULT_RECIPE as DEFAULT_SNIPPET } from "./demoVectors";
 export const DEFAULT_RQL = SNIPPETS[0]!.rql;

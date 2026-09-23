@@ -370,6 +370,32 @@ kbd {
   word-break: break-word;
 }
 
+.recipe-kind {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 1px 6px;
+  background: #17263a;
+  color: var(--info);
+  font-weight: 500;
+}
+.recipe-kind.hybrid { background: var(--accent-dim); color: var(--accent); }
+.recipe-kind.fail-closed { background: var(--danger-dim); color: #ffb3bb; }
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 10px;
+}
+.admin-tag {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
 .schema-grid {
   display: grid;
   grid-template-columns: 1fr;

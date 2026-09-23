@@ -1,27 +1,44 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CollectionList } from "./components/CollectionList";
 import { ConnectionPanel } from "./components/ConnectionPanel";
+import { DataPanel } from "./components/DataPanel";
+import { HealthPanel } from "./components/HealthPanel";
+import { IndexPanel } from "./components/IndexPanel";
 import { PlanTree } from "./components/PlanTree";
 import { QueryEditor } from "./components/QueryEditor";
+import { RecipeList } from "./components/RecipeList";
 import { ResultsPanel } from "./components/ResultsPanel";
 import { SchemaPanel } from "./components/SchemaPanel";
 import { VectorPlot } from "./components/VectorPlot";
 import {
+  buildUpsertPoints,
+  createPayloadIndex,
+  deletePayloadIndex,
+  deletePoints,
   emitRql,
   executeRql,
   explainRql,
   formatError,
-  isApiError,
   getCollection,
+  getInstanceHealth,
+  isApiError,
   listCollections,
   scrollPoints,
+  upsertPoints,
   type CollectionInfo,
+  type InstanceHealth,
   type ScrollPoint,
 } from "./lib/api";
+import {
+  DEFAULT_RECIPE,
+  DEMO_RECIPES,
+  DEMO_VECTOR_LABEL,
+  recipeBindings,
+  type DemoRecipe,
+} from "./lib/demoVectors";
 import { loadConnection, saveConnection, type Connection } from "./lib/storage";
-import { DEFAULT_RQL } from "./lib/snippets";
 
-type Tab = "query" | "visualize" | "schema";
+type Tab = "query" | "data" | "indexes" | "health" | "visualize" | "schema";
 
 function demoUnitVector(dim: number): number[] {
   const v = Array.from({ length: dim }, () => Math.random() * 2 - 1);
@@ -51,6 +68,16 @@ function parseVectorJson(text: string): number[] {
   throw new Error("query vector must be a JSON array of finite numbers");
 }
 
+function applyRecipeVectors(recipe: DemoRecipe): { dense: string; sparse: string } {
+  const bind = recipeBindings(recipe);
+  return {
+    dense: bind.dense ? JSON.stringify(bind.dense) : "",
+    sparse: bind.sparse ? JSON.stringify(bind.sparse) : "",
+  };
+}
+
+const initialVectors = applyRecipeVectors(DEFAULT_RECIPE);
+
 export default function App() {
   const [conn, setConn] = useState<Connection>(() => loadConnection());
   const [connected, setConnected] = useState(false);
@@ -62,11 +89,16 @@ export default function App() {
   const [sampleError, setSampleError] = useState<string | null>(null);
   const [sampleBusy, setSampleBusy] = useState(false);
   const [tab, setTab] = useState<Tab>("query");
-  const [rql, setRql] = useState(DEFAULT_RQL);
-  const [vectorText, setVectorText] = useState("");
+  const [recipeId, setRecipeId] = useState<string | null>(DEFAULT_RECIPE.id);
+  const [rql, setRql] = useState(DEFAULT_RECIPE.rql);
+  const [vectorText, setVectorText] = useState(initialVectors.dense);
+  const [sparseText, setSparseText] = useState(initialVectors.sparse);
   const [demoUsed, setDemoUsed] = useState(false);
-  const [vectorNote, setVectorNote] = useState<string | null>(null);
+  const [storedDemo, setStoredDemo] = useState(true);
+  const [vectorNote, setVectorNote] = useState<string | null>(DEMO_VECTOR_LABEL);
   const [busy, setBusy] = useState(false);
+  const [adminBusy, setAdminBusy] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
   const [resultError, setResultError] = useState<string | null>(null);
   const [hits, setHits] = useState<
     { id: unknown; score: unknown; payload: Record<string, unknown> }[] | null
@@ -78,6 +110,8 @@ export default function App() {
   const [emitJson, setEmitJson] = useState<unknown>(null);
   const [logical, setLogical] = useState<Record<string, unknown> | null>(null);
   const [physical, setPhysical] = useState<Record<string, unknown> | null>(null);
+  const [health, setHealth] = useState<InstanceHealth | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
 
   const selectedInfo = useMemo(
     () => collections.find((c) => c.name === selected) ?? null,
@@ -88,6 +122,37 @@ export default function App() {
     setConn(next);
     saveConnection(next);
   };
+
+  const refreshCollection = useCallback(
+    async (name: string) => {
+      try {
+        const info = await getCollection(conn, name);
+        setCollections((prev) => prev.map((c) => (c.name === name ? info : c)));
+        return info;
+      } catch (err) {
+        setAdminError(formatError(err));
+        return null;
+      }
+    },
+    [conn],
+  );
+
+  const loadSample = useCallback(async () => {
+    if (!selected) {
+      setSample([]);
+      return;
+    }
+    setSampleBusy(true);
+    setSampleError(null);
+    try {
+      setSample(await scrollPoints(conn, selected, 160));
+    } catch (err) {
+      setSample([]);
+      setSampleError(formatError(err));
+    } finally {
+      setSampleBusy(false);
+    }
+  }, [conn, selected]);
 
   const connect = useCallback(async () => {
     setConnectBusy(true);
@@ -104,7 +169,9 @@ export default function App() {
               name: c.name,
               pointsCount: null,
               vectors: null,
+              sparseVectors: null,
               status: "unknown",
+              payloadIndexes: [],
               raw: {},
             } satisfies CollectionInfo;
           }
@@ -131,30 +198,38 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!connected || !selected) {
-      setSample([]);
+    void loadSample();
+  }, [loadSample]);
+
+  const loadHealth = useCallback(async () => {
+    if (!connected) {
+      setHealth(null);
       return;
     }
-    let cancelled = false;
-    setSampleBusy(true);
-    setSampleError(null);
-    scrollPoints(conn, selected, 160)
-      .then((pts) => {
-        if (!cancelled) setSample(pts);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setSample([]);
-          setSampleError(formatError(err));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setSampleBusy(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [connected, selected, conn]);
+    setHealthError(null);
+    try {
+      setHealth(await getInstanceHealth(conn));
+    } catch (err) {
+      setHealth(null);
+      setHealthError(formatError(err));
+    }
+  }, [conn, connected]);
+
+  useEffect(() => {
+    if (tab === "health" && connected) void loadHealth();
+  }, [tab, connected, loadHealth]);
+
+  function loadRecipe(recipe: DemoRecipe) {
+    const next = applyRecipeVectors(recipe);
+    setRecipeId(recipe.id);
+    setRql(recipe.rql);
+    setVectorText(next.dense);
+    setSparseText(next.sparse);
+    setDemoUsed(false);
+    setStoredDemo(Boolean(next.dense));
+    setVectorNote(next.dense ? DEMO_VECTOR_LABEL : null);
+    setTab("query");
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -166,7 +241,7 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rql, vectorText, conn, selected, demoUsed]);
+  }, [rql, vectorText, sparseText, conn, selected, demoUsed, storedDemo]);
 
   async function runExplain() {
     setBusy(true);
@@ -212,14 +287,22 @@ export default function App() {
     try {
       if (!vectorText.trim()) {
         throw new Error(
-          "Execute needs a query vector. Paste JSON, upload a file, or click \"Demo random vector\" (demo-only).",
+          "Execute needs a query vector. Paste JSON, upload a file, pick a Recipe, or click \"Demo random vector\" (demo-only).",
         );
       }
       const vector = parseVectorJson(vectorText);
+      const vectors: Record<string, unknown> = { $q_dense: vector, q_dense: vector, dense: vector };
+      if (sparseText.trim()) {
+        const sparse = JSON.parse(sparseText) as unknown;
+        vectors.$q_sparse = sparse;
+        vectors.q_sparse = sparse;
+        vectors.sparse = sparse;
+        vectors.bm25 = sparse;
+      }
       const res = await executeRql({
         rql,
         conn,
-        vectors: { $q_dense: vector, q_dense: vector, dense: vector },
+        vectors,
         collection: selected ?? undefined,
       });
       setLogical(res.logical);
@@ -229,6 +312,7 @@ export default function App() {
       setRequest(res.result.request);
       setNotes([
         ...res.result.notes,
+        ...(storedDemo ? [DEMO_VECTOR_LABEL] : []),
         ...(demoUsed ? ["Query vector is a DEMO random unit vector — not a text embedding."] : []),
       ]);
       setExplainText(null);
@@ -251,6 +335,7 @@ export default function App() {
     const dim = inferDim(selectedInfo?.vectors);
     setVectorText(JSON.stringify(demoUnitVector(dim)));
     setDemoUsed(true);
+    setStoredDemo(false);
     setVectorNote(null);
   }
 
@@ -259,8 +344,81 @@ export default function App() {
     parseVectorJson(text);
     setVectorText(text.trim());
     setDemoUsed(false);
+    setStoredDemo(false);
     setVectorNote(`Loaded ${file.name} — treated as a caller-supplied dense vector, not an embedding step.`);
   }
+
+  async function handleUpsert(args: {
+    id: string | number;
+    payload: Record<string, unknown>;
+    dense: number[];
+  }) {
+    if (!selected) throw new Error("select a collection");
+    setAdminBusy(true);
+    setAdminError(null);
+    try {
+      await upsertPoints(conn, selected, buildUpsertPoints(args));
+      await refreshCollection(selected);
+      await loadSample();
+    } catch (err) {
+      setAdminError(formatError(err));
+      throw err;
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleDelete(id: string | number) {
+    if (!selected) return;
+    setAdminBusy(true);
+    setAdminError(null);
+    try {
+      await deletePoints(conn, selected, [id]);
+      await refreshCollection(selected);
+      await loadSample();
+    } catch (err) {
+      setAdminError(formatError(err));
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleCreateIndex(field: string, schema: string) {
+    if (!selected) return;
+    setAdminBusy(true);
+    setAdminError(null);
+    try {
+      await createPayloadIndex(conn, selected, field, schema);
+      await refreshCollection(selected);
+    } catch (err) {
+      setAdminError(formatError(err));
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleDeleteIndex(field: string) {
+    if (!selected) return;
+    setAdminBusy(true);
+    setAdminError(null);
+    try {
+      await deletePayloadIndex(conn, selected, field);
+      await refreshCollection(selected);
+    } catch (err) {
+      setAdminError(formatError(err));
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  const TABS: [Tab, string][] = [
+    ["query", "Query"],
+    ["data", "Data"],
+    ["indexes", "Indexes"],
+    ["health", "Health"],
+    ["visualize", "Visualize"],
+    ["schema", "Schema"],
+  ];
 
   return (
     <div className="app">
@@ -281,13 +439,7 @@ export default function App() {
         </div>
         <div className="top-actions">
           <div className="tabs">
-            {(
-              [
-                ["query", "Query"],
-                ["visualize", "Visualize"],
-                ["schema", "Schema"],
-              ] as const
-            ).map(([id, label]) => (
+            {TABS.map(([id, label]) => (
               <button
                 key={id}
                 type="button"
@@ -317,30 +469,67 @@ export default function App() {
             onSelect={setSelected}
             emptyHint={
               connected
-                ? "This instance has no collections. Run npm run seed against a local Qdrant."
+                ? "No collections. docker compose -f web/docker-compose.yml up -d && cd web && npm run seed"
                 : "Connect to list collections. Default is http://127.0.0.1:6333."
             }
           />
+          <RecipeList recipes={DEMO_RECIPES} selectedId={recipeId} onSelect={loadRecipe} />
         </aside>
 
         <main className="pane">
           {tab === "query" ? (
             <QueryEditor
               value={rql}
-              onChange={setRql}
+              onChange={(next) => {
+                setRql(next);
+                setRecipeId(null);
+              }}
               vectorText={vectorText}
               onVectorText={(t) => {
                 setVectorText(t);
                 setDemoUsed(false);
+                setStoredDemo(false);
               }}
+              sparseText={sparseText}
+              onSparseText={setSparseText}
               vectorNote={vectorNote}
               demoUsed={demoUsed}
+              storedDemo={storedDemo}
               onDemoVector={useDemoVector}
               onUploadVector={(f) => void uploadVector(f)}
               onExplain={() => void runExplain()}
               onEmit={() => void runEmit()}
               onExecute={() => void runExecute()}
               busy={busy}
+            />
+          ) : null}
+          {tab === "data" ? (
+            <DataPanel
+              points={sample}
+              loading={sampleBusy}
+              error={adminError || sampleError}
+              busy={adminBusy}
+              onRefresh={() => void loadSample()}
+              onUpsert={handleUpsert}
+              onDelete={handleDelete}
+            />
+          ) : null}
+          {tab === "indexes" ? (
+            <IndexPanel
+              indexes={selectedInfo?.payloadIndexes ?? []}
+              busy={adminBusy}
+              error={adminError}
+              onCreate={handleCreateIndex}
+              onDelete={handleDeleteIndex}
+            />
+          ) : null}
+          {tab === "health" ? (
+            <HealthPanel
+              health={health}
+              collection={selectedInfo}
+              error={healthError}
+              busy={false}
+              onRefresh={() => void loadHealth()}
             />
           ) : null}
           {tab === "visualize" ? (
@@ -376,8 +565,8 @@ export default function App() {
 
       <footer className="statusbar">
         <span>
-          <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>Enter</kbd> execute · <kbd>⌘</kbd>+<kbd>Shift</kbd>+
-          <kbd>E</kbd> explain · profile qdrant
+          <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>Enter</kbd> execute · recipes auto-bind stored demo
+          vectors · Data/Indexes/Health = admin API
         </span>
         <span>parse in-browser · compile/explain/emit via @vijaykumarjob0701/rql</span>
       </footer>

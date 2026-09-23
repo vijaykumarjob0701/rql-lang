@@ -1,59 +1,79 @@
 # RQL Studio
 
-Polished local console for browsing a **Qdrant** instance and writing **RQL** on top of it.
+Polished local console for browsing a **Qdrant** instance and writing **RQL** on top of it — plus admin Data / Indexes / Health panels for an end-to-end demo.
 
 ```
 parse → compile → explain / emit     (library: @vijaykumarjob0701/rql)
                  ↘ execute           (Studio server — library execute() is not on main yet)
+writes / indexes / health            (Qdrant REST via the Vite proxy — not RQL)
 ```
 
-The UI does **not** reimplement the language. The editor calls the library parser in-browser. Explain / emit / compile run in the Vite process against the local `javascript` package (`file:../javascript`). Live execute builds a Qdrant Query API body from the PhysicalPlan and POSTs it through a **local proxy** (Qdrant Cloud and local Docker almost never send usable CORS headers).
+The UI does **not** reimplement the language. The editor calls the library parser in-browser. Explain / emit / compile run in the Vite process against the local `javascript` package (`file:../javascript`). Live execute builds a Qdrant Query API body from the PhysicalPlan and POSTs it through a **local proxy**. Create / update / delete / indexes talk to Qdrant REST and are labeled as admin API.
 
-## Run
+## Full demo walkthrough
 
-From this directory:
+### 1. Start a vector DB
+
+Prefer real Qdrant when Docker is available (from this directory):
 
 ```bash
 npm install
+npm run compose          # docker compose -f docker-compose.yml up -d
+# wait a couple of seconds, then:
+npm run seed             # or: npm run seed:demo
 npm run dev
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173).
-
-`npm run dev` builds `../javascript` first so `compile` / `explain` / `emit` resolve.
-
-### Connect to local Qdrant
+One-shot when Docker works:
 
 ```bash
-docker run --rm -p 6333:6333 qdrant/qdrant
-```
-
-In Studio: URL `http://127.0.0.1:6333`, API key blank, **Connect**.
-
-Seed the demo collection (128-d cosine, named vector `dense`, payload `topic` / `tenant_id` / `clearance`):
-
-```bash
-npm run seed
-```
-
-Then reopen **Visualize** — PCA of the sample should show three topic clusters.
-
-### No Docker?
-
-This repo ships a **subset mock** that speaks enough of the Qdrant HTTP API for browse / visualize / dense execute:
-
-```bash
-npm run mock-qdrant   # http://127.0.0.1:6333
-# other terminal
-npm run seed
+npm install
+npm run demo             # compose + wait + seed
 npm run dev
 ```
 
-The mock is labeled in its startup log. It is **not** Qdrant. Hybrid RRF / fusion queries are rejected (same honesty as fail-closed execute).
+**No Docker?** Keep the in-memory mock (not Qdrant; implements scroll, upsert, delete, indexes, health, dense query, and toy RRF):
 
-### Qdrant Cloud
+```bash
+npm run mock-qdrant      # terminal 1 — http://127.0.0.1:6333
+npm run seed             # terminal 2
+npm run dev
+```
 
-Paste the cluster URL + API key. Traffic is `browser → Vite `/api/qdrant` → your URL`. The key is stored in `localStorage` (`rql-studio.connection`) and forwarded as `api-key`. **It is never logged.**
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Connect with URL `http://127.0.0.1:6333` (blank API key).
+
+### 2. What seed creates
+
+Collection `studio_demo`:
+
+- 120 points, 5 topics (`research`, `support`, `legal`, `product`, `ops`)
+- Tenants `acme` / `globex` / `initech`, clearance 1–5, plus `title`, `lang`, `source`, `year`
+- Named dense vector `dense` (128-d cosine) and sparse `bm25_sparse` (toy token ids — **not** a real BM25 analyzer)
+- Payload indexes: `tenant_id`, `topic`, `clearance`, `lang`, `source`
+- Stored demo query vectors written to `src/lib/demo-query-vectors.json` (labeled as such)
+
+### 3. Try recipes (first-click Execute)
+
+Sidebar **Recipes** load RQL **and** matching stored demo vectors. You do not need the Demo random vector button for these.
+
+1. **Filtered dense + ACL** — already selected on first load. Click **Execute**. Hits should be `tenant_id=acme` and `clearance >= 2`.
+2. **Dense only** — unfiltered support centroid.
+3. **Globex tenant filter** — ACL-style tenant swap.
+4. **Product topic** — payload `topic = 'product'`.
+5. **Hybrid RRF** — binds a stored sparse `{indices,values}`. Works on real Qdrant and on mock-qdrant’s toy RRF.
+6. **Late / ColBERT** and **Linear fusion** — Explain/Emit work; Execute **fail-closes** (no silent dense substitute).
+
+Yellow notes say the query vector is a **stored demo vector**, not an embedding of the QUERY text.
+
+### 4. Inspect, write, index, re-query
+
+1. **Schema** / **Visualize** — payload sketch, vector config, PCA color-by `topic`.
+2. **Data** (admin API) — scroll the sample, **Edit** a row, change title, **Upsert**. Or **JSON panel**. **Delete id** removes a point. Refresh scroll.
+3. **Indexes** (admin API) — list seed indexes; create `year` as `integer`; delete it if you want.
+4. **Health** — `/`, `/readyz`, `/livez`, `/cluster`, plus the selected collection’s counts/config.
+5. Go back to **Query**, run **Filtered dense + ACL** again — if you upserted an `acme` point with clearance ≥ 2 it can appear in hits.
+
+Writes are **not** RQL `INSERT`. v0.1 RQL is retrieve-only; the Data panel is honest Qdrant REST.
 
 ## Keyboard
 
@@ -67,24 +87,28 @@ Paste the cluster URL + API key. Traffic is `browser → Vite `/api/qdrant` → 
 
 Execute still needs a dense vector. Studio will not invent an embedding of the `QUERY` text.
 
-- Paste a JSON number array
-- Upload a `.json` file
-- **Demo random vector** — clearly labeled demo-only. Scores from that path are **not** semantic retrieval.
+- **Recipes** auto-fill stored demo query vectors (labeled)
+- Paste a JSON number array / upload `.json`
+- **Demo random vector** — extra demo-only path; scores are **not** semantic retrieval
 
 ## Fail-closed execute
 
-Representable today: dense ANN + simple `AND` filters (`=` / ranges) on the seeded collection.
+Representable: dense ANN + simple `AND` filters; hybrid RRF when a sparse binding is present (recipes ship one).
 
-Rejected with the error on screen (no silent substitute):
+Rejected on screen:
 
-- `SEARCH LATE` / ColBERT (`LateInteractExec`)
+- `SEARCH LATE` / ColBERT
 - `FUSE LINEAR`
-- Hybrid `FUSE RRF` without a sparse `{ indices, values }` binding
+- Hybrid RRF **without** a sparse `{ indices, values }` binding
 - Filter expressions the adapter cannot parse (`OR`, functions, …)
 
 `emit` always returns a `VendorRequestSketch` with `notExecuted: true`.
 
-When [the live adapter PR](https://github.com/vijaykumarjob0701/rql-lang/pull/1) lands, this server can switch to library `execute()` without changing the UI.
+When [the live adapter PR](https://github.com/vijaykumarjob0701/rql-lang/pull/1) lands, the retrieve path can switch to library `execute()` without a UI rewrite.
+
+## Qdrant Cloud
+
+Paste the cluster URL + API key. Traffic is `browser → Vite /api/qdrant → your URL`. The key is stored in `localStorage` (`rql-studio.connection`) and forwarded as `api-key`. **It is never logged.**
 
 ## Screenshots
 
@@ -108,13 +132,14 @@ Captured against the seeded mock (`npm run mock-qdrant && npm run seed`).
 npm test
 ```
 
-Covers editor → library parse, PCA, connection storage, and execute fail-closed / mocked HTTP.
+Covers editor → library parse, demo recipe bindings, admin helpers, PCA, storage, execute fail-closed / mocked HTTP.
 
 ## Layout
 
 ```
 web/
-  src/           React UI (Monaco, PCA plot, results, plan tree)
-  server/        Vite middleware: Qdrant proxy + RQL compile/explain/emit/execute
-  scripts/       seed.mjs, mock-qdrant.mjs
+  docker-compose.yml   real Qdrant
+  src/                 React UI (recipes, query, data, indexes, health, PCA)
+  server/              Vite middleware: Qdrant proxy + RQL compile/explain/emit/execute
+  scripts/             seed.mjs, demo-data.mjs, mock-qdrant.mjs, try-demo.mjs
 ```

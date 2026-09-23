@@ -28,7 +28,19 @@ export function SchemaPanel({
       </div>
       <div className="card">
         <h4>Vector config</h4>
-        <pre className="json-view">{JSON.stringify(info.vectors, null, 2)}</pre>
+        <pre className="json-view">
+          {JSON.stringify({ vectors: info.vectors, sparse_vectors: info.sparseVectors }, null, 2)}
+        </pre>
+      </div>
+      <div className="card">
+        <h4>Payload indexes</h4>
+        {info.payloadIndexes.length === 0 ? (
+          <p className="muted">None reported. Create some on the Indexes tab (admin API).</p>
+        ) : (
+          <p className="muted" style={{ margin: 0 }}>
+            {info.payloadIndexes.map((i) => `${i.field} (${i.dataType})`).join(" · ")}
+          </p>
+        )}
       </div>
       <div className="card">
         <h4>Payload sketch (from sample)</h4>

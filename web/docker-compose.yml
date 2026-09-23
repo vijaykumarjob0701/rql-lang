@@ -1,0 +1,14 @@
+# Local Qdrant for the RQL Studio demo.
+#   docker compose -f web/docker-compose.yml up -d
+#   cd web && npm run seed
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - rql_studio_qdrant:/qdrant/storage
+
+volumes:
+  rql_studio_qdrant:

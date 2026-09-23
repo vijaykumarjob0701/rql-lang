@@ -1,23 +1,29 @@
 #!/usr/bin/env node
 /**
- * Seed a demo collection for RQL Studio.
+ * Seed the RQL Studio demo collection.
  *
- *   docker run --rm -p 6333:6333 qdrant/qdrant
+ *   docker compose -f docker-compose.yml up -d
  *   npm run seed
  *
- * Or against the in-memory mock:
- *
- *   npm run mock-qdrant   # other terminal
- *   npm run seed
+ * Or: npm run mock-qdrant  (other terminal) then npm run seed
  */
+import { writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  DIM,
+  NAME,
+  POINT_COUNT,
+  collectionBody,
+  generatePoints,
+  queryVectors,
+} from "./demo-data.mjs";
+
 const URL = (process.env.QDRANT_URL || "http://127.0.0.1:6333").replace(/\/$/, "");
 const KEY = process.env.QDRANT_API_KEY || "";
-const NAME = process.env.STUDIO_COLLECTION || "studio_demo";
-const DIM = Number(process.env.STUDIO_DIM || 128);
-const N = Number(process.env.STUDIO_POINTS || 90);
-
-const TOPICS = ["research", "support", "legal"];
-const TENANTS = ["acme", "globex"];
+const COLLECTION = process.env.STUDIO_COLLECTION || NAME;
+const dim = Number(process.env.STUDIO_DIM || DIM);
+const n = Number(process.env.STUDIO_POINTS || POINT_COUNT);
 
 function headers() {
   const h = { "Content-Type": "application/json" };
@@ -32,60 +38,59 @@ async function qdrant(method, path, body) {
     body: body == null ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`Qdrant ${method} ${path} → ${res.status} ${text.slice(0, 400)}`);
+  if (!res.ok) throw new Error(`Qdrant ${method} ${path} → ${res.status} ${text.slice(0, 500)}`);
   return text ? JSON.parse(text) : {};
 }
 
-function randn() {
-  let u = 0;
-  let v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+const points = generatePoints({ dim, n });
+const queries = queryVectors({ dim });
+
+try {
+  await qdrant("DELETE", `/collections/${encodeURIComponent(COLLECTION)}`);
+} catch {
+  /* first run */
 }
 
-function normalize(vec) {
-  const n = Math.hypot(...vec);
-  return vec.map((x) => x / (n || 1));
-}
+await qdrant("PUT", `/collections/${encodeURIComponent(COLLECTION)}`, collectionBody(dim));
 
-function centroid(i) {
-  const v = Array.from({ length: DIM }, (_, j) => (j % 3 === i ? 1 : 0.02 * randn()));
-  return normalize(v);
-}
-
-const centroids = TOPICS.map((_, i) => centroid(i));
-
-const points = Array.from({ length: N }, (_, idx) => {
-  const cluster = idx % TOPICS.length;
-  const topic = TOPICS[cluster];
-  const noise = Array.from({ length: DIM }, () => 0.08 * randn());
-  const vec = normalize(centroids[cluster].map((x, j) => x + noise[j]));
-  return {
-    id: idx + 1,
-    vector: { dense: vec },
-    payload: {
-      topic,
-      tenant_id: TENANTS[idx % TENANTS.length],
-      clearance: 1 + (idx % 5),
-      title: `${topic} note ${idx + 1}`,
-    },
-  };
-});
-
-await qdrant("PUT", `/collections/${encodeURIComponent(NAME)}`, {
-  vectors: { dense: { size: DIM, distance: "Cosine" } },
-});
-
-const batch = 30;
+const batch = 40;
 for (let i = 0; i < points.length; i += batch) {
-  await qdrant("PUT", `/collections/${encodeURIComponent(NAME)}/points?wait=true`, {
+  await qdrant("PUT", `/collections/${encodeURIComponent(COLLECTION)}/points?wait=true`, {
     points: points.slice(i, i + batch),
   });
 }
 
-const info = await qdrant("GET", `/collections/${encodeURIComponent(NAME)}`);
-const count = info.result?.points_count ?? N;
-console.log(`Seeded ${NAME} at ${URL} — ${count} points, ${DIM}-d cosine named vector "dense".`);
-console.log("Payload fields: topic, tenant_id, clearance, title.");
-console.log("Connect RQL Studio to this URL and open the Visualize tab.");
+for (const [field, schema] of [
+  ["tenant_id", "keyword"],
+  ["topic", "keyword"],
+  ["clearance", "integer"],
+  ["lang", "keyword"],
+  ["source", "keyword"],
+]) {
+  try {
+    await qdrant("PUT", `/collections/${encodeURIComponent(COLLECTION)}/index?wait=true`, {
+      field_name: field,
+      field_schema: schema,
+    });
+  } catch (err) {
+    console.warn(`index ${field}: ${err instanceof Error ? err.message : err}`);
+  }
+}
+
+const here = dirname(fileURLToPath(import.meta.url));
+writeFileSync(
+  join(here, "..", "src", "lib", "demo-query-vectors.json"),
+  `${JSON.stringify({ dim, collection: COLLECTION, ...queries }, null, 2)}\n`,
+);
+
+const info = await qdrant("GET", `/collections/${encodeURIComponent(COLLECTION)}`);
+const count = info.result?.points_count ?? n;
+console.log(`Seeded ${COLLECTION} at ${URL}`);
+console.log(`  ${count} points · ${dim}-d cosine named vector "dense" · sparse "bm25_sparse"`);
+console.log("  payload: topic, tenant_id, clearance, title, lang, source, year");
+console.log("  payload indexes: tenant_id, topic, clearance, lang, source");
+console.log("");
+console.log("Open RQL Studio:");
+console.log("  cd web && npm run dev");
+console.log("  http://127.0.0.1:5173  → Connect → pick studio_demo → Recipes → Execute");
+console.log("Stored demo query vectors are labeled as such — not text embeddings.");

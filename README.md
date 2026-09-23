@@ -30,13 +30,15 @@ rql-lang/
 
 ## RQL Studio
 
-Local developer console: connect to Qdrant, browse collections, project a vector sample, and run `parse` / `compile` / `explain` / `emit` from the JS package. Live execute is a thin Studio proxy (library `execute()` is not on `main` yet).
+Local developer console: connect to Qdrant, browse collections, run recipe-bound RQL (explain / emit / execute), and manage points/indexes via the Qdrant admin API. Live retrieve execute is a thin Studio proxy (library `execute()` is not on `main` yet).
 
 ```bash
-cd web && npm install && npm run dev
+cd web && npm install
+npm run compose && npm run seed && npm run dev
+# no Docker: npm run mock-qdrant  (other terminal) && npm run seed && npm run dev
 ```
 
-Optional: `docker run --rm -p 6333:6333 qdrant/qdrant` then `cd web && npm run seed`. Full notes and screenshots: [`web/README.md`](web/README.md).
+Full walkthrough: [`web/README.md`](web/README.md).
 
 ## Install locally
 
