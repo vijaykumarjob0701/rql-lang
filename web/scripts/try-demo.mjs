@@ -14,7 +14,7 @@ function run(cmd, args, opts = {}) {
   return spawnSync(cmd, args, { stdio: "inherit", cwd: web, ...opts });
 }
 
-const compose = run("docker", ["compose", "-f", "docker-compose.yml", "up", "-d"]);
+const compose = run("docker", ["compose", "-f", "docker-compose.yml", "up", "-d", "qdrant"]);
 if (compose.status !== 0) {
   console.log("");
   console.log("Docker compose did not start Qdrant. Fallback:");

@@ -33,12 +33,15 @@ rql-lang/
 Local developer console: connect to Qdrant, browse collections, run recipe-bound RQL (explain / emit / execute), and manage points/indexes via the Qdrant admin API. Live retrieve execute is a thin Studio proxy (library `execute()` is not on `main` yet).
 
 ```bash
-cd web && npm install
-npm run compose && npm run seed && npm run dev
-# no Docker: npm run mock-qdrant  (other terminal) && npm run seed && npm run dev
+# Docker only — no host Node. Studio at http://localhost:8080
+docker compose -f web/docker-compose.yml up --build
+# (or: docker compose up --build from the repo root)
+
+# Host Vite against compose Qdrant:
+cd web && npm install && npm run compose && npm run seed && npm run dev
 ```
 
-Full walkthrough: [`web/README.md`](web/README.md).
+Connect the UI to `http://localhost:6333`. Full walkthrough: [`web/README.md`](web/README.md).
 
 ## Install locally
 

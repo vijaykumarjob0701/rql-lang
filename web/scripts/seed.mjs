@@ -25,6 +25,19 @@ const COLLECTION = process.env.STUDIO_COLLECTION || NAME;
 const dim = Number(process.env.STUDIO_DIM || DIM);
 const n = Number(process.env.STUDIO_POINTS || POINT_COUNT);
 
+async function waitReady(base, attempts = 40) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(`${base}/readyz`);
+      if (res.ok) return;
+    } catch {
+      /* still booting */
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`Qdrant not ready at ${base} after ${attempts} attempts`);
+}
+
 function headers() {
   const h = { "Content-Type": "application/json" };
   if (KEY) h["api-key"] = KEY;
@@ -41,6 +54,8 @@ async function qdrant(method, path, body) {
   if (!res.ok) throw new Error(`Qdrant ${method} ${path} → ${res.status} ${text.slice(0, 500)}`);
   return text ? JSON.parse(text) : {};
 }
+
+await waitReady(URL);
 
 const points = generatePoints({ dim, n });
 const queries = queryVectors({ dim });
@@ -78,10 +93,14 @@ for (const [field, schema] of [
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
-writeFileSync(
-  join(here, "..", "src", "lib", "demo-query-vectors.json"),
-  `${JSON.stringify({ dim, collection: COLLECTION, ...queries }, null, 2)}\n`,
-);
+try {
+  writeFileSync(
+    join(here, "..", "src", "lib", "demo-query-vectors.json"),
+    `${JSON.stringify({ dim, collection: COLLECTION, ...queries }, null, 2)}\n`,
+  );
+} catch {
+  console.warn("skip writing src/lib/demo-query-vectors.json (read-only image is fine)");
+}
 
 const info = await qdrant("GET", `/collections/${encodeURIComponent(COLLECTION)}`);
 const count = info.result?.points_count ?? n;
@@ -92,5 +111,6 @@ console.log("  payload indexes: tenant_id, topic, clearance, lang, source");
 console.log("");
 console.log("Open RQL Studio:");
 console.log("  cd web && npm run dev");
-console.log("  http://127.0.0.1:5173  → Connect → pick studio_demo → Recipes → Execute");
+console.log("  Docker UI:  http://127.0.0.1:8080  (connect form: http://127.0.0.1:6333)");
+console.log("  Host Vite:  cd web && npm run dev → http://127.0.0.1:5173");
 console.log("Stored demo query vectors are labeled as such — not text embeddings.");

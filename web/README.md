@@ -10,25 +10,50 @@ writes / indexes / health            (Qdrant REST via the Vite proxy — not RQL
 
 The UI does **not** reimplement the language. The editor calls the library parser in-browser. Explain / emit / compile run in the Vite process against the local `javascript` package (`file:../javascript`). Live execute builds a Qdrant Query API body from the PhysicalPlan and POSTs it through a **local proxy**. Create / update / delete / indexes talk to Qdrant REST and are labeled as admin API.
 
+## Fastest local spin-up (Docker only)
+
+No host Node required. From the **repo root** or `web/`:
+
+```bash
+docker compose -f web/docker-compose.yml up --build
+# same stack from repo root:
+# docker compose up --build
+```
+
+Then open **http://localhost:8080**. In the connection form use **`http://localhost:6333`** (or `http://127.0.0.1:6333`) and a blank API key. The browser talks to host-mapped Qdrant; the Studio container remaps that loopback URL to `http://qdrant:6333` on the compose network (`QDRANT_URL`).
+
+| Service | Host port | Notes |
+|---|---|---|
+| **RQL Studio** | **8080** | Vite preview + API proxy (`STUDIO_PORT` changes the published host port) |
+| Qdrant REST | 6333 | Persistent volume `rql_studio_qdrant` |
+| Qdrant gRPC | 6334 | unused by Studio |
+
+Reset the seeded collection / Qdrant disk:
+
+```bash
+docker compose -f web/docker-compose.yml down -v
+```
+
+Optional env (compose file): `QDRANT_API_KEY`, `QDRANT_INTERNAL_URL` (default `http://qdrant:6333`), `STUDIO_PORT` (host port, default `8080`).
+
 ## Full demo walkthrough
 
-### 1. Start a vector DB
+### 1. Start a vector DB (host Node)
 
-Prefer real Qdrant when Docker is available (from this directory):
+Prefer real Qdrant when Docker is available (from this directory). This path starts **Qdrant only** so `npm run dev` can bind :5173:
 
 ```bash
 npm install
-npm run compose          # docker compose -f docker-compose.yml up -d
-# wait a couple of seconds, then:
+npm run compose          # docker compose up -d qdrant
 npm run seed             # or: npm run seed:demo
 npm run dev
 ```
 
-One-shot when Docker works:
+One-shot Qdrant + seed, then host Vite:
 
 ```bash
 npm install
-npm run demo             # compose + wait + seed
+npm run demo             # compose qdrant + wait + seed
 npm run dev
 ```
 
@@ -138,7 +163,8 @@ Covers editor → library parse, demo recipe bindings, admin helpers, PCA, stora
 
 ```
 web/
-  docker-compose.yml   real Qdrant
+  Dockerfile           multi-stage: seed + javascript/web build + vite preview
+  docker-compose.yml   qdrant + seed + studio (UI on :8080)
   src/                 React UI (recipes, query, data, indexes, health, PCA)
   server/              Vite middleware: Qdrant proxy + RQL compile/explain/emit/execute
   scripts/             seed.mjs, demo-data.mjs, mock-qdrant.mjs, try-demo.mjs

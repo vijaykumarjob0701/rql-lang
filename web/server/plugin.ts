@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { compile, emit, explain, parse } from "@vijaykumarjob0701/rql";
 import { ExecutionError, executeAgainstQdrant } from "./execute";
+import { resolveQdrantApiKey, resolveQdrantTarget } from "./qdrantTarget";
 
 const HOP = new Set([
   "connection",
@@ -85,12 +86,14 @@ async function handleRql(req: IncomingMessage, res: ServerResponse, action: stri
       return;
     }
     if (action === "execute") {
-      const url = String(payload.url ?? header(req, "x-qdrant-url") ?? "").trim();
-      if (!url) {
+      let url: string;
+      try {
+        url = resolveQdrantTarget(String(payload.url ?? header(req, "x-qdrant-url") ?? ""));
+      } catch {
         sendJson(res, 400, { error: "missing Qdrant url", name: "RequestError" });
         return;
       }
-      const apiKey = String(payload.apiKey ?? header(req, "x-qdrant-api-key") ?? "") || undefined;
+      const apiKey = resolveQdrantApiKey(String(payload.apiKey ?? header(req, "x-qdrant-api-key") ?? ""));
       const collection = payload.collection ? String(payload.collection) : undefined;
       const vectors = (payload.vectors as Record<string, unknown> | undefined) ?? undefined;
       try {
@@ -119,8 +122,10 @@ async function handleRql(req: IncomingMessage, res: ServerResponse, action: stri
 }
 
 async function handleQdrantProxy(req: IncomingMessage, res: ServerResponse, restPath: string): Promise<void> {
-  const targetBase = (header(req, "x-qdrant-url") || "").trim().replace(/\/$/, "");
-  if (!targetBase) {
+  let targetBase: string;
+  try {
+    targetBase = resolveQdrantTarget(header(req, "x-qdrant-url"));
+  } catch {
     sendJson(res, 400, { error: "missing x-qdrant-url header", name: "RequestError" });
     return;
   }
@@ -136,7 +141,7 @@ async function handleQdrantProxy(req: IncomingMessage, res: ServerResponse, rest
     target.search = q.startsWith("?") ? q : `?${q}`;
   }
 
-  const apiKey = header(req, "x-qdrant-api-key");
+  const apiKey = resolveQdrantApiKey(header(req, "x-qdrant-api-key"));
   const outgoing: Record<string, string> = {
     Accept: "application/json",
   };

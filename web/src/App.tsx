@@ -469,7 +469,7 @@ export default function App() {
             onSelect={setSelected}
             emptyHint={
               connected
-                ? "No collections. docker compose -f web/docker-compose.yml up -d && cd web && npm run seed"
+                ? "No collections. From the repo: docker compose -f web/docker-compose.yml up --build"
                 : "Connect to list collections. Default is http://127.0.0.1:6333."
             }
           />

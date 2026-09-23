@@ -1,6 +1,19 @@
-# Local Qdrant for the RQL Studio demo.
-#   docker compose -f web/docker-compose.yml up -d
-#   cd web && npm run seed
+# Full local demo: Qdrant + seed + RQL Studio (no host Node required).
+#
+#   docker compose -f web/docker-compose.yml up --build
+#   open http://localhost:8080
+#   Connect form: http://localhost:6333  (blank API key)
+#
+# Host-mapped ports: Studio :8080 · Qdrant :6333
+# Inside the compose network the Studio proxy remaps localhost → http://qdrant:6333
+#
+# Reset data:
+#   docker compose -f web/docker-compose.yml down -v
+#
+# Qdrant-only (host Vite / npm run seed):
+#   docker compose -f web/docker-compose.yml up -d qdrant
+name: rql-studio
+
 services:
   qdrant:
     image: qdrant/qdrant:latest
@@ -9,6 +22,42 @@ services:
       - "6334:6334"
     volumes:
       - rql_studio_qdrant:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/6333'"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  seed:
+    build:
+      context: ..
+      dockerfile: web/Dockerfile
+      target: seed
+    environment:
+      QDRANT_URL: ${QDRANT_INTERNAL_URL:-http://qdrant:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    restart: on-failure
+
+  studio:
+    build:
+      context: ..
+      dockerfile: web/Dockerfile
+      target: studio
+    ports:
+      - "${STUDIO_PORT:-8080}:8080"
+    environment:
+      QDRANT_URL: ${QDRANT_INTERNAL_URL:-http://qdrant:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      STUDIO_PORT: "8080"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
 
 volumes:
   rql_studio_qdrant:

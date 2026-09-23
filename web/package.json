@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "seed": "node scripts/seed.mjs",
     "seed:demo": "node scripts/seed.mjs",
-    "compose": "docker compose -f docker-compose.yml up -d",
+    "compose": "docker compose -f docker-compose.yml up -d qdrant",
     "demo": "node scripts/try-demo.mjs",
     "mock-qdrant": "node scripts/mock-qdrant.mjs"
   },

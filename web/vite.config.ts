@@ -9,7 +9,8 @@ export default defineConfig({
     host: true,
   },
   preview: {
-    port: 5173,
+    port: Number(process.env.STUDIO_PORT || 5173),
     host: true,
+    allowedHosts: true,
   },
 });
