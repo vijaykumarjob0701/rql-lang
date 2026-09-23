@@ -1,21 +1,14 @@
-# Full local demo: Qdrant + seed + RQL Studio (no host Node required).
+# Dual stack: Qdrant + Postgres/pgvector + both seeds + RQL Studio.
 #
-#   docker compose -f web/docker-compose.yml up --build
+#   docker compose -f web/docker-compose.pgvector.yml up --build
 #   open http://localhost:8080
-#   Connect form: http://localhost:6333  (blank API key)
 #
-# Qdrant + Postgres/pgvector (same Studio):
+# Connection form:
+#   Qdrant   → http://localhost:6333   (blank API key)
+#   pgvector → postgres://rql:rql@127.0.0.1:5432/rql_studio
+#
+# Same extra services via profile on the Qdrant compose file:
 #   docker compose -f web/docker-compose.yml --profile pgvector up --build
-#   # or: docker compose -f web/docker-compose.pgvector.yml up --build
-#
-# Host-mapped ports: Studio :8080 · Qdrant :6333 · Postgres :5432 (profile)
-# Inside the compose network the Studio proxy remaps localhost → qdrant / postgres
-#
-# Reset data:
-#   docker compose -f web/docker-compose.yml --profile pgvector down -v
-#
-# Qdrant-only (host Vite / npm run seed):
-#   docker compose -f web/docker-compose.yml up -d qdrant
 name: rql-studio
 
 services:
@@ -46,26 +39,7 @@ services:
         condition: service_healthy
     restart: on-failure
 
-  studio:
-    build:
-      context: ..
-      dockerfile: web/Dockerfile
-      target: studio
-    ports:
-      - "${STUDIO_PORT:-8080}:8080"
-    environment:
-      QDRANT_URL: ${QDRANT_INTERNAL_URL:-http://qdrant:6333}
-      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
-      DATABASE_URL: ${PG_INTERNAL_URL:-postgres://rql:rql@postgres:5432/rql_studio}
-      STUDIO_PORT: "8080"
-    depends_on:
-      qdrant:
-        condition: service_healthy
-      seed:
-        condition: service_completed_successfully
-
   postgres:
-    profiles: ["pgvector"]
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: rql
@@ -83,7 +57,6 @@ services:
       start_period: 5s
 
   seed-pg:
-    profiles: ["pgvector"]
     build:
       context: ..
       dockerfile: web/Dockerfile
@@ -94,6 +67,28 @@ services:
       postgres:
         condition: service_healthy
     restart: on-failure
+
+  studio:
+    build:
+      context: ..
+      dockerfile: web/Dockerfile
+      target: studio
+    ports:
+      - "${STUDIO_PORT:-8080}:8080"
+    environment:
+      QDRANT_URL: ${QDRANT_INTERNAL_URL:-http://qdrant:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      DATABASE_URL: ${PG_INTERNAL_URL:-postgres://rql:rql@postgres:5432/rql_studio}
+      STUDIO_PORT: "8080"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      seed-pg:
+        condition: service_completed_successfully
 
 volumes:
   rql_studio_qdrant:

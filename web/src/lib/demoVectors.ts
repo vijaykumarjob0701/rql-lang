@@ -8,6 +8,7 @@ export type DemoRecipe = {
   blurb: string;
   rql: string;
   kind: "dense" | "hybrid" | "fail-closed";
+  backend?: "qdrant" | "pgvector";
   /** Topic centroid used for the stored dense query vector, if any. */
   denseTopic?: keyof typeof stored.dense;
   usesSparse?: boolean;
@@ -110,7 +111,97 @@ export const DEMO_RECIPES: DemoRecipe[] = [
   },
 ];
 
+export const PG_RECIPES: DemoRecipe[] = [
+  {
+    id: "pg-filtered-dense",
+    title: "Filtered dense + ACL",
+    blurb: "AnnExec + PRE filter on chunks. Execute runs parameterized <=> SQL.",
+    kind: "dense",
+    backend: "pgvector",
+    denseTopic: "research",
+    rql: `RETRIEVE chunks
+  SEARCH DENSE ON embedding METRIC cosine CANDIDATES 20 VECTOR_REF $q_dense
+  WHERE tenant_id = 'acme' AND clearance >= 2
+  ACL_HARD;
+`,
+  },
+  {
+    id: "pg-dense-only",
+    title: "Dense only",
+    blurb: "Unfiltered nearest neighbors — emit is a pgvector SQL sketch.",
+    kind: "dense",
+    backend: "pgvector",
+    denseTopic: "support",
+    rql: `RETRIEVE chunks
+  SEARCH DENSE ON embedding METRIC cosine CANDIDATES 12 VECTOR_REF $q_dense;
+`,
+  },
+  {
+    id: "pg-tenant-globex",
+    title: "Globex tenant filter",
+    blurb: "Same ANN, different tenant_id predicate pushed into WHERE.",
+    kind: "dense",
+    backend: "pgvector",
+    denseTopic: "legal",
+    rql: `RETRIEVE chunks
+  SEARCH DENSE ON embedding METRIC cosine CANDIDATES 15 VECTOR_REF $q_dense
+  WHERE tenant_id = 'globex' AND clearance >= 1
+  ACL_HARD;
+`,
+  },
+  {
+    id: "pg-topic-product",
+    title: "Product topic",
+    blurb: "Filter topic = product with the product centroid.",
+    kind: "dense",
+    backend: "pgvector",
+    denseTopic: "product",
+    rql: `RETRIEVE chunks
+  SEARCH DENSE ON embedding METRIC cosine CANDIDATES 16 VECTOR_REF $q_dense
+  WHERE topic = 'product';
+`,
+  },
+  {
+    id: "pg-late",
+    title: "Late / ColBERT (fail-closed)",
+    blurb: "Emit sketches a placeholder. Execute refuses — no MaxSim in pgvector.",
+    kind: "fail-closed",
+    backend: "pgvector",
+    denseTopic: "research",
+    rql: `RETRIEVE chunks
+  SEARCH LATE ON token_vectors CANDIDATES 10 VECTOR_REF $q_tok;
+`,
+  },
+  {
+    id: "pg-linear",
+    title: "Linear fusion (fail-closed)",
+    blurb: "emit(profile=pgvector) notes the client shim. Execute fail-closes.",
+    kind: "fail-closed",
+    backend: "pgvector",
+    denseTopic: "ops",
+    rql: `RETRIEVE chunks
+  SEARCH
+    DENSE ON embedding METRIC cosine CANDIDATES 30 VECTOR_REF $q_dense
+    AND BM25 ON description CANDIDATES 30 QUERY 'electronics deals'
+  WHERE tenant_id = 'acme'
+  FUSE LINEAR WEIGHTS (0.5, 0.5)
+  LIMIT 12;
+`,
+  },
+];
+
+export const ALL_RECIPES: DemoRecipe[] = [...DEMO_RECIPES, ...PG_RECIPES];
+
 export const DEFAULT_RECIPE = DEMO_RECIPES[0]!;
+export const DEFAULT_PG_RECIPE = PG_RECIPES[0]!;
+
+export function recipesForBackend(backend: "qdrant" | "pgvector"): DemoRecipe[] {
+  return ALL_RECIPES.filter((r) => (r.backend ?? "qdrant") === backend);
+}
+
+export function defaultRecipeFor(backend: "qdrant" | "pgvector"): DemoRecipe {
+  return recipesForBackend(backend)[0]!;
+}
 
 export function recipeBindings(recipe: DemoRecipe): {
   dense: number[] | null;

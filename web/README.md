@@ -1,14 +1,14 @@
 # RQL Studio
 
-Polished local console for browsing a **Qdrant** instance and writing **RQL** on top of it — plus admin Data / Indexes / Health panels for an end-to-end demo.
+Polished local console for browsing **Qdrant** or **Postgres/pgvector** and writing **RQL** on top of it — plus admin Data / Indexes / Health / SQL panels for an end-to-end demo.
 
 ```
 parse → compile → explain / emit     (library: @vijaykumarjob0701/rql)
                  ↘ execute           (Studio server — library execute() is not on main yet)
-writes / indexes / health            (Qdrant REST via the Vite proxy — not RQL)
+writes / indexes / health            (Qdrant REST or sandboxed demo SQL — not RQL)
 ```
 
-The UI does **not** reimplement the language. The editor calls the library parser in-browser. Explain / emit / compile run in the Vite process against the local `javascript` package (`file:../javascript`). Live execute builds a Qdrant Query API body from the PhysicalPlan and POSTs it through a **local proxy**. Create / update / delete / indexes talk to Qdrant REST and are labeled as admin API.
+The UI does **not** reimplement the language. The editor calls the library parser in-browser. Explain / emit / compile run in the Vite process against the local `javascript` package (`file:../javascript`). Live execute builds a Qdrant Query API body **or** a parameterized `ORDER BY embedding <=> $1` SQL statement from the PhysicalPlan. Create / update / delete / indexes are labeled admin API (Qdrant REST or allowlisted Postgres examples). RQL still has no INSERT/UPDATE/DDL.
 
 ## Fastest local spin-up (Docker only)
 
@@ -35,6 +35,119 @@ docker compose -f web/docker-compose.yml down -v
 ```
 
 Optional env (compose file): `QDRANT_API_KEY`, `QDRANT_INTERNAL_URL` (default `http://qdrant:6333`), `STUDIO_PORT` (host port, default `8080`).
+
+## pgvector demo
+
+Postgres + the `vector` extension coexist with Qdrant. Either command:
+
+```bash
+# dedicated dual-stack file (Qdrant + Postgres + both seeds + Studio)
+docker compose -f web/docker-compose.pgvector.yml up --build
+
+# same extras as a profile on the Qdrant compose file
+docker compose -f web/docker-compose.yml --profile pgvector up --build
+```
+
+Open **http://localhost:8080**. In **Connection** pick **pgvector** and use:
+
+```
+postgres://rql:rql@127.0.0.1:5432/rql_studio
+```
+
+The browser still talks to host-mapped `:5432`; the Studio container remaps loopback to `postgres://rql:rql@postgres:5432/rql_studio` (`DATABASE_URL`). Qdrant stays on `:6333` — switch the backend toggle to use it.
+
+| Service | Host port | Notes |
+|---|---|---|
+| RQL Studio | 8080 | same UI; `/api/pg` is the sandboxed demo SQL API |
+| Postgres + pgvector | 5432 | user/password/db `rql` / `rql` / `rql_studio` |
+| Qdrant REST | 6333 | unchanged |
+
+`seed-pg` applies `web/sql/schema.sql` and inserts the same stored demo centroids as the Qdrant seed (not a model).
+
+### Tables (≥5)
+
+| Table | Role |
+|---|---|
+| `tenants` | ACL-ish tenant rows (`acme`, `globex`, `initech`) |
+| `projects` | logical groupings (one per topic) |
+| `documents` | source-doc metadata |
+| `chunks` | text + `embedding vector(128)` + HNSW |
+| `query_logs` | recipe / execute history |
+| `embedding_jobs` | seed job rows (`demo-centroid-v0`) |
+
+Indexes: HNSW `idx_chunks_embedding_hnsw` on `chunks.embedding`, plus B-trees on `tenant_id`, `document_id`, `project_id`, `topic`.
+
+### Example queries (copy-paste)
+
+These are **Postgres SQL**, not RQL. Studio’s **SQL** tab runs them only by id against the demo database.
+
+**UPDATE** a row / embedding:
+
+```sql
+UPDATE chunks
+SET content = 'Demo-updated chunk — stored centroid, not a model re-embed.',
+    embedding = $1::vector
+WHERE id = 'chunk-demo-editable'
+RETURNING id, document_id, left(content, 72) AS content;
+```
+
+**CREATE INDEX** / list indexes:
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw
+  ON chunks USING hnsw (embedding vector_cosine_ops);
+
+SELECT tablename, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+ORDER BY tablename, indexname;
+```
+
+**DELETE**:
+
+```sql
+DELETE FROM query_logs
+WHERE id = (SELECT max(id) FROM query_logs)
+RETURNING id, recipe_id, created_at;
+```
+
+**Run a similarity query** (same shape `emit` sketches):
+
+```sql
+SELECT c.id, c.topic, c.tenant_id, c.clearance, d.title,
+       c.embedding <=> $1::vector AS dist
+FROM chunks c
+JOIN documents d ON d.id = c.document_id
+WHERE c.tenant_id = 'acme' AND c.clearance >= 2
+ORDER BY c.embedding <=> $1::vector
+LIMIT 8;
+```
+
+**Running queries**:
+
+```sql
+SELECT pid, usename, state, wait_event_type, left(query, 160) AS query
+FROM pg_stat_activity
+WHERE datname = current_database()
+ORDER BY pid;
+```
+
+`$1` in UPDATE/similarity is a stored demo vector (Recipes auto-bind one). Studio will not invent an embedding of the QUERY text.
+
+### RQL `emit` profile `pgvector`
+
+Explain / Emit with backend **pgvector** calls `emit(physical, { profile: "pgvector" })`. That is still a **SQL sketch** (`notExecuted: true`): `ORDER BY embedding <=> :q_embedding`, plus comments for ITERATIVE scans and ShimCast client RRF. It does **not** open a socket.
+
+Studio **Execute** on this backend is a separate, fail-closed path: dense ANN + simple `AND` filters become a parameterized `SELECT` on `chunks`. Late / linear / hybrid BM25+RRF are refused (the profile sets `rrfNative: false`; this demo has no `tsv` column).
+
+Host Vite against a running Postgres:
+
+```bash
+npm run compose:pg        # or start Postgres yourself
+# in another terminal, if you only started the DB:
+npm run seed:pg
+npm run dev
+```
 
 ## Full demo walkthrough
 
@@ -157,15 +270,17 @@ Captured against the seeded mock (`npm run mock-qdrant && npm run seed`).
 npm test
 ```
 
-Covers editor → library parse, demo recipe bindings, admin helpers, PCA, storage, execute fail-closed / mocked HTTP.
+Covers editor → library parse, demo recipe bindings, admin helpers, PCA, storage, execute fail-closed / mocked HTTP, pgvector schema (≥5 tables) + SQL examples + execute/admin helpers.
 
 ## Layout
 
 ```
 web/
   Dockerfile           multi-stage: seed + javascript/web build + vite preview
-  docker-compose.yml   qdrant + seed + studio (UI on :8080)
-  src/                 React UI (recipes, query, data, indexes, health, PCA)
-  server/              Vite middleware: Qdrant proxy + RQL compile/explain/emit/execute
-  scripts/             seed.mjs, demo-data.mjs, mock-qdrant.mjs, try-demo.mjs
+  docker-compose.yml            qdrant + seed + studio (UI on :8080); `--profile pgvector` adds Postgres
+  docker-compose.pgvector.yml   dual stack (Qdrant + pgvector)
+  sql/schema.sql                ≥5 tables, HNSW + B-tree indexes
+  src/                          React UI (recipes, query, data, indexes, SQL, health, PCA)
+  server/                       Vite middleware: Qdrant proxy + /api/pg + RQL execute
+  scripts/                      seed.mjs, seed-pg.mjs, demo-data.mjs, mock-qdrant.mjs
 ```

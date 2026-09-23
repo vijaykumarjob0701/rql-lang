@@ -14,7 +14,9 @@
     "test:watch": "vitest",
     "seed": "node scripts/seed.mjs",
     "seed:demo": "node scripts/seed.mjs",
+    "seed:pg": "node scripts/seed-pg.mjs",
     "compose": "docker compose -f docker-compose.yml up -d qdrant",
+    "compose:pg": "docker compose -f docker-compose.pgvector.yml up --build",
     "demo": "node scripts/try-demo.mjs",
     "mock-qdrant": "node scripts/mock-qdrant.mjs"
   },
@@ -25,6 +27,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@vijaykumarjob0701/rql": "file:../javascript",
     "monaco-editor": "^0.52.2",
+    "pg": "^8.16.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
@@ -32,6 +35,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^20.14.0",
+    "@types/pg": "^8.15.5",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.5.2",

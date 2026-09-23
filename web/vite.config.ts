@@ -4,6 +4,12 @@ import { studioApiPlugin } from "./server/plugin";
 
 export default defineConfig({
   plugins: [react(), studioApiPlugin()],
+  optimizeDeps: {
+    exclude: ["pg"],
+  },
+  ssr: {
+    external: ["pg"],
+  },
   server: {
     port: 5173,
     host: true,

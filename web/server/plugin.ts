@@ -2,6 +2,19 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { compile, emit, explain, parse } from "@vijaykumarjob0701/rql";
 import { ExecutionError, executeAgainstQdrant } from "./execute";
+import { executeAgainstPgvector } from "./executePg";
+import {
+  deleteChunk,
+  exampleCatalog,
+  listPgIndexes,
+  listTableStats,
+  pgHealth,
+  runPgExample,
+  scrollChunks,
+  upsertChunk,
+} from "./pgAdmin";
+import { pgQuery } from "./pgPool";
+import { redactDatabaseUrl, resolvePgTarget } from "./pgTarget";
 import { resolveQdrantApiKey, resolveQdrantTarget } from "./qdrantTarget";
 
 const HOP = new Set([
@@ -86,24 +99,24 @@ async function handleRql(req: IncomingMessage, res: ServerResponse, action: stri
       return;
     }
     if (action === "execute") {
-      let url: string;
-      try {
-        url = resolveQdrantTarget(String(payload.url ?? header(req, "x-qdrant-url") ?? ""));
-      } catch {
-        sendJson(res, 400, { error: "missing Qdrant url", name: "RequestError" });
-        return;
-      }
-      const apiKey = resolveQdrantApiKey(String(payload.apiKey ?? header(req, "x-qdrant-api-key") ?? ""));
       const collection = payload.collection ? String(payload.collection) : undefined;
       const vectors = (payload.vectors as Record<string, unknown> | undefined) ?? undefined;
+      const usePg = backend === "pgvector" || profile === "pgvector";
       try {
-        const result = await executeAgainstQdrant({
-          physical,
-          vectors,
-          collection,
-          url,
-          apiKey,
-        });
+        const result = usePg
+          ? await executeAgainstPgvector({
+              physical,
+              vectors,
+              collection,
+              query: pgQuery(resolvePgUrl(req, payload)),
+            })
+          : await executeAgainstQdrant({
+              physical,
+              vectors,
+              collection,
+              url: resolveQdrantTarget(String(payload.url ?? header(req, "x-qdrant-url") ?? "")),
+              apiKey: resolveQdrantApiKey(String(payload.apiKey ?? header(req, "x-qdrant-api-key") ?? "")),
+            });
         sendJson(res, 200, { logical, physical, result });
       } catch (err) {
         sendJson(res, err instanceof ExecutionError ? 422 : 400, {
@@ -175,6 +188,78 @@ async function handleQdrantProxy(req: IncomingMessage, res: ServerResponse, rest
   }
 }
 
+function resolvePgUrl(req: IncomingMessage, payload?: Record<string, unknown>): string {
+  return resolvePgTarget(String(payload?.pgUrl ?? payload?.url ?? header(req, "x-pg-url") ?? ""));
+}
+
+async function handlePg(req: IncomingMessage, res: ServerResponse, restPath: string): Promise<void> {
+  let url: string;
+  try {
+    url = resolvePgUrl(req);
+  } catch {
+    sendJson(res, 400, { error: "missing Postgres url", name: "RequestError" });
+    return;
+  }
+  const query = pgQuery(url);
+  const path = restPath.replace(/\/$/, "") || "/";
+  try {
+    if (req.method === "GET" && (path === "/" || path === "/health")) {
+      sendJson(res, 200, { ...await pgHealth(query), redactedUrl: redactDatabaseUrl(url) });
+      return;
+    }
+    if (req.method === "GET" && path === "/tables") {
+      sendJson(res, 200, { tables: await listTableStats(query) });
+      return;
+    }
+    if (req.method === "GET" && path === "/indexes") {
+      sendJson(res, 200, { indexes: await listPgIndexes(query) });
+      return;
+    }
+    if (req.method === "GET" && path === "/examples") {
+      sendJson(res, 200, { examples: exampleCatalog() });
+      return;
+    }
+    if (req.method === "GET" && path === "/chunks") {
+      const rawLimit = Number(new URL(req.url || "/", "http://studio.local").searchParams.get("limit") || 160);
+      sendJson(res, 200, { points: await scrollChunks(query, rawLimit) });
+      return;
+    }
+    let payload: Record<string, unknown> = {};
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      try {
+        payload = JSON.parse((await readBody(req)) || "{}") as Record<string, unknown>;
+      } catch {
+        sendJson(res, 400, { error: "invalid JSON body", name: "RequestError" });
+        return;
+      }
+    }
+    if (req.method === "POST" && path === "/examples/run") {
+      const id = String(payload.id ?? "");
+      const vector = Array.isArray(payload.vector) ? (payload.vector as number[]) : undefined;
+      sendJson(res, 200, await runPgExample(query, id, vector));
+      return;
+    }
+    if (req.method === "POST" && path === "/chunks/upsert") {
+      await upsertChunk(query, {
+        id: String(payload.id ?? ""),
+        payload: (payload.payload as Record<string, unknown>) || {},
+        dense: (payload.dense as number[]) || [],
+      });
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+    if (req.method === "POST" && path === "/chunks/delete") {
+      const deleted = await deleteChunk(query, String(payload.id ?? ""));
+      sendJson(res, 200, { deleted });
+      return;
+    }
+    sendJson(res, 404, { error: `unknown pg route ${path}`, name: "RequestError" });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    sendJson(res, 502, { error: `Postgres demo API: ${msg}`, name: "PgError" });
+  }
+}
+
 function mount(
   req: IncomingMessage,
   res: ServerResponse,
@@ -182,6 +267,13 @@ function mount(
 ): void {
   const url = req.url || "";
   const pathOnly = url.split("?")[0] || "";
+  if (pathOnly.startsWith("/api/pg")) {
+    const rest = pathOnly.slice("/api/pg".length) || "/";
+    void handlePg(req, res, rest).catch((err) => {
+      sendJson(res, 500, rqlErrorPayload(err));
+    });
+    return;
+  }
   if (pathOnly.startsWith("/api/rql/")) {
     const action = pathOnly.slice("/api/rql/".length).replace(/\/$/, "");
     void handleRql(req, res, action).catch((err) => {

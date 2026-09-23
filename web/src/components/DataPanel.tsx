@@ -35,11 +35,13 @@ export function DataPanel({
   onRefresh,
   onUpsert,
   onDelete,
+  disclaimer,
 }: {
   points: ScrollPoint[];
   loading: boolean;
   error: string | null;
   busy: boolean;
+  disclaimer?: string;
   onRefresh: () => void;
   onUpsert: (args: {
     id: string | number;
@@ -125,8 +127,8 @@ export function DataPanel({
   return (
     <div className="pane-body">
       <div className="banner warn">
-        Qdrant admin API via the Studio proxy — not RQL. Writes are PUT /points and POST
-        /points/delete.
+        {disclaimer ??
+          "Qdrant admin API via the Studio proxy — not RQL. Writes are PUT /points and POST /points/delete."}
       </div>
       {error ? <div className="banner err">{error}</div> : null}
       {formError ? <div className="banner err">{formError}</div> : null}

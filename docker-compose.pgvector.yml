@@ -1,0 +1,6 @@
+# Convenience wrapper — same dual stack as web/docker-compose.pgvector.yml
+#
+#   docker compose -f docker-compose.pgvector.yml up --build
+#   open http://localhost:8080
+include:
+  - path: web/docker-compose.pgvector.yml

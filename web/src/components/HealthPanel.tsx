@@ -6,16 +6,22 @@ export function HealthPanel({
   error,
   onRefresh,
   busy,
+  disclaimer,
+  emptyHint,
 }: {
   health: InstanceHealth | null;
   collection: CollectionInfo | null;
   error: string | null;
   onRefresh: () => void;
   busy: boolean;
+  disclaimer?: string;
+  emptyHint?: string;
 }) {
   return (
     <div className="pane-body">
-      <div className="banner warn">Instance health is Qdrant REST (`/`, `/readyz`, `/livez`, `/cluster`).</div>
+      <div className="banner warn">
+        {disclaimer ?? "Instance health is Qdrant REST (`/`, `/readyz`, `/livez`, `/cluster`)."}
+      </div>
       {error ? <div className="banner err">{error}</div> : null}
       <div className="row" style={{ marginBottom: 10 }}>
         <button className="btn tiny" type="button" disabled={busy} onClick={onRefresh}>
@@ -25,7 +31,7 @@ export function HealthPanel({
       {!health ? (
         <div className="empty">
           <h3>Not connected</h3>
-          <p>Connect to a Qdrant or mock-qdrant URL to read cluster health.</p>
+          <p>{emptyHint ?? "Connect to a Qdrant or mock-qdrant URL to read cluster health."}</p>
         </div>
       ) : (
         <div className="schema-grid">

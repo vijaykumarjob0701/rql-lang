@@ -18,7 +18,12 @@ describe("Studio smoke", () => {
   it("renders the connection form", () => {
     render(
       <ConnectionPanel
-        value={{ url: "http://127.0.0.1:6333", apiKey: "" }}
+        value={{
+          backend: "qdrant",
+          url: "http://127.0.0.1:6333",
+          apiKey: "",
+          pgUrl: "postgres://rql:rql@127.0.0.1:5432/rql_studio",
+        }}
         connected={false}
         busy={false}
         error={null}
@@ -28,6 +33,7 @@ describe("Studio smoke", () => {
     );
     expect(screen.getByTestId("qdrant-url")).toHaveValue("http://127.0.0.1:6333");
     expect(screen.getByRole("button", { name: /connect/i })).toBeInTheDocument();
+    expect(screen.getByTestId("backend-pgvector")).toBeInTheDocument();
   });
 
   it("default editor snippet is parseable by the library", () => {

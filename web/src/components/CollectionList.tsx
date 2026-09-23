@@ -5,6 +5,8 @@ type Props = {
   selected: string | null;
   onSelect: (name: string) => void;
   emptyHint: string;
+  title?: string;
+  itemNoun?: string;
 };
 
 function vectorSummary(vectors: unknown): string {
@@ -23,17 +25,24 @@ function vectorSummary(vectors: unknown): string {
   return "unknown config";
 }
 
-export function CollectionList({ items, selected, onSelect, emptyHint }: Props) {
+export function CollectionList({
+  items,
+  selected,
+  onSelect,
+  emptyHint,
+  title = "Collections",
+  itemNoun = "points",
+}: Props) {
   return (
     <section style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <div className="pane-head">
-        Collections
+        {title}
         <span className="faint">{items.length}</span>
       </div>
       <div className="pane-body">
         {items.length === 0 ? (
           <div className="empty">
-            <h3>No collections</h3>
+            <h3>No {title.toLowerCase()}</h3>
             <p>{emptyHint}</p>
           </div>
         ) : (
@@ -46,7 +55,7 @@ export function CollectionList({ items, selected, onSelect, emptyHint }: Props) 
             >
               <div className="name">{c.name}</div>
               <div className="meta">
-                {c.pointsCount == null ? "count unknown" : `${c.pointsCount} points`}
+                {c.pointsCount == null ? "count unknown" : `${c.pointsCount} ${itemNoun}`}
                 {" · "}
                 {vectorSummary(c.vectors)}
               </div>

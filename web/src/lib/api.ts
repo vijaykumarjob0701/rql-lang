@@ -70,6 +70,7 @@ export type ApiError = {
 function connHeaders(conn: Connection): Record<string, string> {
   const headers: Record<string, string> = {
     "x-qdrant-url": conn.url,
+    "x-pg-url": conn.pgUrl || "",
   };
   if (conn.apiKey) headers["x-qdrant-api-key"] = conn.apiKey;
   return headers;
@@ -329,18 +330,95 @@ export function executeRql(args: {
   collection?: string;
   profile?: string;
 }): Promise<RqlExecuteResponse> {
+  const profile = args.profile ?? (args.conn.backend === "pgvector" ? "pgvector" : "qdrant");
   return rqlPost(
     "execute",
     {
       rql: args.rql,
-      profile: args.profile ?? "qdrant",
+      profile,
+      backend: profile,
       vectors: args.vectors,
       collection: args.collection,
       url: args.conn.url,
       apiKey: args.conn.apiKey,
+      pgUrl: args.conn.pgUrl,
     },
     args.conn,
   );
+}
+
+export type PgTableStat = {
+  name: string;
+  rows: number;
+  columns: { name: string; type: string }[];
+};
+
+export type PgIndexRow = {
+  table: string;
+  name: string;
+  def: string;
+};
+
+async function pgRequest<T>(conn: Connection, method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = { ...connHeaders(conn) };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const res = await fetch(`/api/pg${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const json = await readJson(res);
+  if (!res.ok) throw asError(json, res.status);
+  return json as T;
+}
+
+export function listPgTables(conn: Connection): Promise<{ tables: PgTableStat[] }> {
+  return pgRequest(conn, "GET", "/tables");
+}
+
+export function listPgIndexesApi(conn: Connection): Promise<{ indexes: PgIndexRow[] }> {
+  return pgRequest(conn, "GET", "/indexes");
+}
+
+export function getPgHealth(conn: Connection): Promise<InstanceHealth & { redactedUrl?: string }> {
+  return pgRequest(conn, "GET", "/health");
+}
+
+export function scrollPgChunks(conn: Connection, limit = 160): Promise<{
+  points: ScrollPoint[];
+}> {
+  return pgRequest(conn, "GET", `/chunks?limit=${limit}`);
+}
+
+export function runPgExampleApi(
+  conn: Connection,
+  id: string,
+  vector?: number[],
+): Promise<{ example: { id: string; title: string }; rows: Record<string, unknown>[]; rowCount: number }> {
+  return pgRequest(conn, "POST", "/examples/run", { id, vector });
+}
+
+export function upsertPgChunk(
+  conn: Connection,
+  args: { id: string | number; payload: Record<string, unknown>; dense: number[] },
+): Promise<{ ok: true }> {
+  return pgRequest(conn, "POST", "/chunks/upsert", args);
+}
+
+export function deletePgChunk(conn: Connection, id: string | number): Promise<{ deleted: number }> {
+  return pgRequest(conn, "POST", "/chunks/delete", { id });
+}
+
+export function tablesToCollections(tables: PgTableStat[]): CollectionInfo[] {
+  return tables.map((t) => ({
+    name: t.name,
+    pointsCount: t.rows,
+    vectors: t.name === "chunks" ? { size: 128, distance: "Cosine" } : null,
+    sparseVectors: null,
+    status: "seeded",
+    payloadIndexes: [],
+    raw: t as unknown as Record<string, unknown>,
+  }));
 }
 
 export function isApiError(err: unknown): err is ApiError {

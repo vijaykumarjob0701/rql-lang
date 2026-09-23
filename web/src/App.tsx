@@ -9,11 +9,13 @@ import { QueryEditor } from "./components/QueryEditor";
 import { RecipeList } from "./components/RecipeList";
 import { ResultsPanel } from "./components/ResultsPanel";
 import { SchemaPanel } from "./components/SchemaPanel";
+import { SqlExamples } from "./components/SqlExamples";
 import { VectorPlot } from "./components/VectorPlot";
 import {
   buildUpsertPoints,
   createPayloadIndex,
   deletePayloadIndex,
+  deletePgChunk,
   deletePoints,
   emitRql,
   executeRql,
@@ -21,24 +23,34 @@ import {
   formatError,
   getCollection,
   getInstanceHealth,
+  getPgHealth,
   isApiError,
   listCollections,
+  listPgIndexesApi,
+  listPgTables,
+  runPgExampleApi,
+  scrollPgChunks,
   scrollPoints,
+  tablesToCollections,
+  upsertPgChunk,
   upsertPoints,
   type CollectionInfo,
   type InstanceHealth,
   type ScrollPoint,
 } from "./lib/api";
 import {
-  DEFAULT_RECIPE,
-  DEMO_RECIPES,
+  defaultRecipeFor,
   DEMO_VECTOR_LABEL,
   recipeBindings,
+  recipesForBackend,
   type DemoRecipe,
 } from "./lib/demoVectors";
+import type { PgExample } from "./lib/pgExamples";
 import { loadConnection, saveConnection, type Connection } from "./lib/storage";
 
-type Tab = "query" | "data" | "indexes" | "health" | "visualize" | "schema";
+type Tab = "query" | "data" | "indexes" | "health" | "visualize" | "schema" | "sql";
+
+const DEFAULT_RECIPE = defaultRecipeFor("qdrant");
 
 function demoUnitVector(dim: number): number[] {
   const v = Array.from({ length: dim }, () => Math.random() * 2 - 1);
@@ -112,6 +124,12 @@ export default function App() {
   const [physical, setPhysical] = useState<Record<string, unknown> | null>(null);
   const [health, setHealth] = useState<InstanceHealth | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [sqlRows, setSqlRows] = useState<Record<string, unknown>[] | null>(null);
+  const [sqlError, setSqlError] = useState<string | null>(null);
+
+  const backend = conn.backend ?? "qdrant";
+  const recipes = recipesForBackend(backend);
+  const profile = backend === "pgvector" ? "pgvector" : "qdrant";
 
   const selectedInfo = useMemo(
     () => collections.find((c) => c.name === selected) ?? null,
@@ -119,8 +137,25 @@ export default function App() {
   );
 
   const persist = (next: Connection) => {
+    const backendChanged = next.backend !== conn.backend;
     setConn(next);
     saveConnection(next);
+    if (backendChanged) {
+      const recipe = defaultRecipeFor(next.backend);
+      const bound = applyRecipeVectors(recipe);
+      setRecipeId(recipe.id);
+      setRql(recipe.rql);
+      setVectorText(bound.dense);
+      setSparseText(bound.sparse);
+      setStoredDemo(Boolean(bound.dense));
+      setDemoUsed(false);
+      setVectorNote(bound.dense ? DEMO_VECTOR_LABEL : null);
+      setConnected(false);
+      setCollections([]);
+      setSelected(null);
+      setHits(null);
+      setSqlRows(null);
+    }
   };
 
   const refreshCollection = useCallback(
@@ -145,7 +180,16 @@ export default function App() {
     setSampleBusy(true);
     setSampleError(null);
     try {
-      setSample(await scrollPoints(conn, selected, 160));
+      if (conn.backend === "pgvector") {
+        if (selected !== "chunks") {
+          setSample([]);
+          return;
+        }
+        const { points } = await scrollPgChunks(conn, 160);
+        setSample(points);
+      } else {
+        setSample(await scrollPoints(conn, selected, 160));
+      }
     } catch (err) {
       setSample([]);
       setSampleError(formatError(err));
@@ -159,28 +203,37 @@ export default function App() {
     setConnectError(null);
     try {
       saveConnection(conn);
-      const listed = await listCollections(conn);
-      const details = await Promise.all(
-        listed.map(async (c) => {
-          try {
-            return await getCollection(conn, c.name);
-          } catch {
-            return {
-              name: c.name,
-              pointsCount: null,
-              vectors: null,
-              sparseVectors: null,
-              status: "unknown",
-              payloadIndexes: [],
-              raw: {},
-            } satisfies CollectionInfo;
-          }
-        }),
-      );
-      setCollections(details);
-      setConnected(true);
-      const prefer = details.find((c) => c.name === "studio_demo") ?? details[0];
-      setSelected(prefer?.name ?? null);
+      if (conn.backend === "pgvector") {
+        const { tables } = await listPgTables(conn);
+        const details = tablesToCollections(tables);
+        setCollections(details);
+        setConnected(true);
+        const prefer = details.find((c) => c.name === "chunks") ?? details[0];
+        setSelected(prefer?.name ?? null);
+      } else {
+        const listed = await listCollections(conn);
+        const details = await Promise.all(
+          listed.map(async (c) => {
+            try {
+              return await getCollection(conn, c.name);
+            } catch {
+              return {
+                name: c.name,
+                pointsCount: null,
+                vectors: null,
+                sparseVectors: null,
+                status: "unknown",
+                payloadIndexes: [],
+                raw: {},
+              } satisfies CollectionInfo;
+            }
+          }),
+        );
+        setCollections(details);
+        setConnected(true);
+        const prefer = details.find((c) => c.name === "studio_demo") ?? details[0];
+        setSelected(prefer?.name ?? null);
+      }
     } catch (err) {
       setConnected(false);
       setCollections([]);
@@ -208,7 +261,7 @@ export default function App() {
     }
     setHealthError(null);
     try {
-      setHealth(await getInstanceHealth(conn));
+      setHealth(conn.backend === "pgvector" ? await getPgHealth(conn) : await getInstanceHealth(conn));
     } catch (err) {
       setHealth(null);
       setHealthError(formatError(err));
@@ -247,7 +300,7 @@ export default function App() {
     setBusy(true);
     setResultError(null);
     try {
-      const res = await explainRql(rql);
+      const res = await explainRql(rql, profile);
       setLogical(res.logical);
       setPhysical(res.physical);
       setExplainText(res.text);
@@ -266,14 +319,16 @@ export default function App() {
     setBusy(true);
     setResultError(null);
     try {
-      const res = await emitRql(rql);
+      const res = await emitRql(rql, profile);
       setLogical(res.logical);
       setPhysical(res.physical);
       setEmitJson(res.sketch);
       setHits(null);
       setRequest((res.sketch as { body?: unknown }).body ?? res.sketch);
       setTimingMs(null);
-      setNotes(["emit() returns a VendorRequestSketch — notExecuted: true. This is not a live query."]);
+      setNotes([
+        `emit(profile=${profile}) returns a VendorRequestSketch — notExecuted: true. This is not a live query.`,
+      ]);
     } catch (err) {
       setResultError(formatError(err));
     } finally {
@@ -304,6 +359,7 @@ export default function App() {
         conn,
         vectors,
         collection: selected ?? undefined,
+        profile,
       });
       setLogical(res.logical);
       setPhysical(res.physical);
@@ -357,8 +413,12 @@ export default function App() {
     setAdminBusy(true);
     setAdminError(null);
     try {
-      await upsertPoints(conn, selected, buildUpsertPoints(args));
-      await refreshCollection(selected);
+      if (conn.backend === "pgvector") {
+        await upsertPgChunk(conn, args);
+      } else {
+        await upsertPoints(conn, selected, buildUpsertPoints(args));
+        await refreshCollection(selected);
+      }
       await loadSample();
     } catch (err) {
       setAdminError(formatError(err));
@@ -373,8 +433,12 @@ export default function App() {
     setAdminBusy(true);
     setAdminError(null);
     try {
-      await deletePoints(conn, selected, [id]);
-      await refreshCollection(selected);
+      if (conn.backend === "pgvector") {
+        await deletePgChunk(conn, id);
+      } else {
+        await deletePoints(conn, selected, [id]);
+        await refreshCollection(selected);
+      }
       await loadSample();
     } catch (err) {
       setAdminError(formatError(err));
@@ -388,8 +452,13 @@ export default function App() {
     setAdminBusy(true);
     setAdminError(null);
     try {
-      await createPayloadIndex(conn, selected, field, schema);
-      await refreshCollection(selected);
+      if (conn.backend === "pgvector") {
+        await runPgExampleApi(conn, "create-hnsw-index");
+        await loadPgIndexes();
+      } else {
+        await createPayloadIndex(conn, selected, field, schema);
+        await refreshCollection(selected);
+      }
     } catch (err) {
       setAdminError(formatError(err));
     } finally {
@@ -411,10 +480,50 @@ export default function App() {
     }
   }
 
+  const loadPgIndexes = useCallback(async () => {
+    if (conn.backend !== "pgvector" || !connected) return;
+    try {
+      const { indexes } = await listPgIndexesApi(conn);
+      setCollections((prev) =>
+        prev.map((c) => ({
+          ...c,
+          payloadIndexes: indexes
+            .filter((idx) => idx.table === c.name)
+            .map((idx) => ({ field: idx.name, dataType: idx.def })),
+        })),
+      );
+    } catch (err) {
+      setAdminError(formatError(err));
+    }
+  }, [conn, connected]);
+
+  useEffect(() => {
+    if (tab === "indexes" && backend === "pgvector" && connected) void loadPgIndexes();
+  }, [tab, backend, connected, loadPgIndexes]);
+
+  async function handleRunSql(example: PgExample) {
+    setAdminBusy(true);
+    setSqlError(null);
+    try {
+      const vector = vectorText.trim() ? parseVectorJson(vectorText) : undefined;
+      const res = await runPgExampleApi(conn, example.id, vector);
+      setSqlRows(res.rows);
+      if (example.id === "create-hnsw-index" || example.id === "list-indexes") {
+        await loadPgIndexes();
+      }
+      if (selected === "chunks") await loadSample();
+    } catch (err) {
+      setSqlError(formatError(err));
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
   const TABS: [Tab, string][] = [
     ["query", "Query"],
     ["data", "Data"],
     ["indexes", "Indexes"],
+    ["sql", "SQL"],
     ["health", "Health"],
     ["visualize", "Visualize"],
     ["schema", "Schema"],
@@ -427,7 +536,7 @@ export default function App() {
           <div className="mark">R</div>
           <div>
             <h1>RQL Studio</h1>
-            <p>Qdrant explorer + retrieval query language</p>
+            <p>Qdrant / pgvector explorer + retrieval query language</p>
           </div>
         </div>
         <div className="top-meta">
@@ -435,6 +544,7 @@ export default function App() {
             <span className={`dot ${connected ? "ok" : connectError ? "bad" : ""}`} />
             {connected ? conn.url.replace(/^https?:\/\//, "") : "not connected"}
           </span>
+          <span className="pill">{backend}</span>
           {selected ? <span className="pill">{selected}</span> : null}
         </div>
         <div className="top-actions">
@@ -467,13 +577,19 @@ export default function App() {
             items={collections}
             selected={selected}
             onSelect={setSelected}
+            title={backend === "pgvector" ? "Tables" : "Collections"}
+            itemNoun={backend === "pgvector" ? "rows" : "points"}
             emptyHint={
               connected
-                ? "No collections. From the repo: docker compose -f web/docker-compose.yml up --build"
-                : "Connect to list collections. Default is http://127.0.0.1:6333."
+                ? backend === "pgvector"
+                  ? "No demo tables. docker compose -f web/docker-compose.pgvector.yml up --build"
+                  : "No collections. From the repo: docker compose -f web/docker-compose.yml up --build"
+                : backend === "pgvector"
+                  ? "Connect with postgres://rql:rql@127.0.0.1:5432/rql_studio"
+                  : "Connect to list collections. Default is http://127.0.0.1:6333."
             }
           />
-          <RecipeList recipes={DEMO_RECIPES} selectedId={recipeId} onSelect={loadRecipe} />
+          <RecipeList recipes={recipes} selectedId={recipeId} onSelect={loadRecipe} />
         </aside>
 
         <main className="pane">
@@ -509,6 +625,11 @@ export default function App() {
               loading={sampleBusy}
               error={adminError || sampleError}
               busy={adminBusy}
+              disclaimer={
+                backend === "pgvector"
+                  ? "Sandboxed demo SQL (UPDATE/DELETE chunks-*) — not RQL. v0.1 RQL is retrieve-only."
+                  : undefined
+              }
               onRefresh={() => void loadSample()}
               onUpsert={handleUpsert}
               onDelete={handleDelete}
@@ -519,8 +640,25 @@ export default function App() {
               indexes={selectedInfo?.payloadIndexes ?? []}
               busy={adminBusy}
               error={adminError}
+              disclaimer={
+                backend === "pgvector"
+                  ? "pg_indexes + CREATE INDEX IF NOT EXISTS on chunks.embedding (HNSW). Not RQL DDL."
+                  : undefined
+              }
+              createLabel={backend === "pgvector" ? "Ensure HNSW index" : "Create payload index"}
+              hideDelete={backend === "pgvector"}
+              simpleCreate={backend === "pgvector"}
               onCreate={handleCreateIndex}
               onDelete={handleDeleteIndex}
+            />
+          ) : null}
+          {tab === "sql" ? (
+            <SqlExamples
+              connected={connected && backend === "pgvector"}
+              busy={adminBusy}
+              error={sqlError}
+              lastRows={sqlRows}
+              onRun={handleRunSql}
             />
           ) : null}
           {tab === "health" ? (
@@ -529,6 +667,16 @@ export default function App() {
               collection={selectedInfo}
               error={healthError}
               busy={false}
+              disclaimer={
+                backend === "pgvector"
+                  ? "Postgres version, pgvector extension, table counts, and pg_stat_activity."
+                  : undefined
+              }
+              emptyHint={
+                backend === "pgvector"
+                  ? "Connect to the demo Postgres URL to read pg_stat_activity."
+                  : undefined
+              }
               onRefresh={() => void loadHealth()}
             />
           ) : null}

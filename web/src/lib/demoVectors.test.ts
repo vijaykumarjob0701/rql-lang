@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { diagnoseRql } from "./rqlParse";
-import { DEFAULT_RECIPE, DEMO_RECIPES, recipeBindings } from "./demoVectors";
+import { DEFAULT_RECIPE, DEMO_RECIPES, PG_RECIPES, recipeBindings, recipesForBackend } from "./demoVectors";
 
 describe("demo recipes", () => {
   it("every recipe parses with the library", () => {
@@ -30,6 +30,15 @@ describe("demo recipes", () => {
     for (const recipe of DEMO_RECIPES.filter((r) => r.kind === "fail-closed")) {
       const bind = recipeBindings(recipe);
       expect(bind.dense, recipe.id).toBeTruthy();
+    }
+  });
+
+  it("pgvector recipes parse and retrieve chunks", () => {
+    expect(recipesForBackend("pgvector").length).toBeGreaterThan(0);
+    for (const recipe of PG_RECIPES) {
+      const d = diagnoseRql(recipe.rql);
+      expect(d.ok, recipe.id).toBe(true);
+      expect(recipe.rql).toMatch(/RETRIEVE chunks/);
     }
   });
 });

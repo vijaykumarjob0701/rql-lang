@@ -148,6 +148,26 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   flex: 1;
 }
 
+.seg {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.seg button {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 7px 8px;
+  color: var(--muted);
+}
+.seg button.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
 .field label { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
 .field input, .field select, .field textarea {
