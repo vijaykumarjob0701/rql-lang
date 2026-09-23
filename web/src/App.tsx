@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CollectionList } from "./components/CollectionList";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { DataPanel } from "./components/DataPanel";
@@ -22,11 +22,11 @@ import {
   executeRql,
   explainRql,
   formatError,
+  fetchAllCollections,
   getCollection,
   getInstanceHealth,
   getPgHealth,
   isApiError,
-  listCollections,
   listPgIndexesApi,
   listPgTables,
   runPgExampleApi,
@@ -47,7 +47,7 @@ import {
   retargetRetrieve,
   type DemoRecipe,
 } from "./lib/demoVectors";
-import { sortCollectionNames } from "./lib/collections";
+import { COLLECTION_POLL_MS, preferCollection } from "./lib/collections";
 import type { PgExample } from "./lib/pgExamples";
 import { loadConnection, saveConnection, type Connection } from "./lib/storage";
 
@@ -129,10 +129,15 @@ export default function App() {
   const [healthError, setHealthError] = useState<string | null>(null);
   const [sqlRows, setSqlRows] = useState<Record<string, unknown>[] | null>(null);
   const [sqlError, setSqlError] = useState<string | null>(null);
+  const [listRefreshedAt, setListRefreshedAt] = useState<number | null>(null);
+  const selectedRef = useRef<string | null>(null);
+  const recipeIdRef = useRef<string | null>(null);
 
   const backend = conn.backend ?? "qdrant";
   const recipes = recipesForBackend(backend, selected ?? "studio_demo");
   const profile = backend === "pgvector" ? "pgvector" : "qdrant";
+  selectedRef.current = selected;
+  recipeIdRef.current = recipeId;
 
   const selectedInfo = useMemo(
     () => collections.find((c) => c.name === selected) ?? null,
@@ -201,61 +206,99 @@ export default function App() {
     }
   }, [conn, selected]);
 
-  const connect = useCallback(async () => {
-    setConnectBusy(true);
-    setConnectError(null);
-    try {
-      saveConnection(conn);
-      if (conn.backend === "pgvector") {
-        const { tables } = await listPgTables(conn);
-        const details = tablesToCollections(tables);
+  const applyListSelection = useCallback(
+    (next: string | null) => {
+      const prev = selectedRef.current;
+      if (next === prev) return;
+      if (!next) {
+        setSelected(null);
+        return;
+      }
+      setSelected(next);
+      if (conn.backend !== "qdrant") return;
+      const rid = recipeIdRef.current;
+      if (rid) {
+        const scoped = recipesForBackend("qdrant", next).find((r) => r.id === rid);
+        if (scoped) {
+          const bound = applyRecipeVectors(scoped);
+          setRecipeId(scoped.id);
+          setRql(scoped.rql);
+          setVectorText(bound.dense);
+          setSparseText(bound.sparse);
+          setStoredDemo(Boolean(bound.dense));
+          setVectorNote(bound.dense ? DEMO_VECTOR_LABEL : null);
+          return;
+        }
+      }
+      setRql((current) => retargetRetrieve(current, next));
+    },
+    [conn.backend],
+  );
+
+  const refreshCollections = useCallback(
+    async (mode: "connect" | "silent") => {
+      if (mode === "connect") {
+        setConnectBusy(true);
+        setConnectError(null);
+      }
+      try {
+        saveConnection(conn);
+        let details: CollectionInfo[];
+        if (conn.backend === "pgvector") {
+          const { tables } = await listPgTables(conn);
+          details = tablesToCollections(tables);
+        } else {
+          details = await fetchAllCollections(conn);
+        }
+        const names = details.map((d) => d.name);
+        const fallback = conn.backend === "pgvector" ? "chunks" : "studio_demo";
+        const next = preferCollection(names, selectedRef.current, fallback);
         setCollections(details);
         setConnected(true);
-        const prefer = details.find((c) => c.name === "chunks") ?? details[0];
-        setSelected(prefer?.name ?? null);
-      } else {
-        const listed = await listCollections(conn);
-        const details = await Promise.all(
-          listed.map(async (c) => {
-            try {
-              return await getCollection(conn, c.name);
-            } catch {
-              return {
-                name: c.name,
-                pointsCount: null,
-                vectors: null,
-                sparseVectors: null,
-                status: "unknown",
-                payloadIndexes: [],
-                raw: {},
-              } satisfies CollectionInfo;
-            }
-          }),
-        );
-        const order = sortCollectionNames(details.map((d) => d.name));
-        const sorted = order
-          .map((name) => details.find((d) => d.name === name))
-          .filter((d): d is CollectionInfo => Boolean(d));
-        setCollections(sorted);
-        setConnected(true);
-        const prefer = sorted.find((c) => c.name === "studio_demo") ?? sorted[0];
-        setSelected(prefer?.name ?? null);
+        setListRefreshedAt(Date.now());
+        applyListSelection(next);
+      } catch (err) {
+        if (mode === "connect") {
+          setConnected(false);
+          setCollections([]);
+          setSelected(null);
+          setListRefreshedAt(null);
+          setConnectError(formatError(err));
+        }
+      } finally {
+        if (mode === "connect") setConnectBusy(false);
       }
-    } catch (err) {
-      setConnected(false);
-      setCollections([]);
-      setSelected(null);
-      setConnectError(formatError(err));
-    } finally {
-      setConnectBusy(false);
-    }
-  }, [conn]);
+    },
+    [conn, applyListSelection],
+  );
+
+  const connect = useCallback(() => refreshCollections("connect"), [refreshCollections]);
 
   useEffect(() => {
-    if (conn.url) void connect();
+    if (conn.url) void refreshCollections("connect");
     // initial restore only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!connected) return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void refreshCollections("silent");
+    };
+    const id = window.setInterval(tick, COLLECTION_POLL_MS);
+    const onVis = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [connected, refreshCollections]);
 
   useEffect(() => {
     void loadSample();
@@ -603,6 +646,7 @@ export default function App() {
             onSelect={selectCollection}
             title={backend === "pgvector" ? "Tables" : "Collections"}
             itemNoun={backend === "pgvector" ? "rows" : "points"}
+            updatedAt={listRefreshedAt}
             emptyHint={
               connected
                 ? backend === "pgvector"

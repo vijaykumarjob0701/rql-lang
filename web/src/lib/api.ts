@@ -1,3 +1,4 @@
+import { sortCollectionNames } from "./collections";
 import type { Connection } from "./storage";
 
 export type QdrantCollection = {
@@ -184,6 +185,31 @@ export async function listCollections(conn: Connection): Promise<QdrantCollectio
     result?: { collections?: { name: string }[] };
   };
   return json.result?.collections ?? [];
+}
+
+export async function fetchAllCollections(conn: Connection): Promise<CollectionInfo[]> {
+  const listed = await listCollections(conn);
+  const details = await Promise.all(
+    listed.map(async (c) => {
+      try {
+        return await getCollection(conn, c.name);
+      } catch {
+        return {
+          name: c.name,
+          pointsCount: null,
+          vectors: null,
+          sparseVectors: null,
+          status: "unknown",
+          payloadIndexes: [],
+          raw: {},
+        } satisfies CollectionInfo;
+      }
+    }),
+  );
+  const order = sortCollectionNames(details.map((d) => d.name));
+  return order
+    .map((name) => details.find((d) => d.name === name))
+    .filter((d): d is CollectionInfo => Boolean(d));
 }
 
 export async function getCollection(conn: Connection, name: string): Promise<CollectionInfo> {

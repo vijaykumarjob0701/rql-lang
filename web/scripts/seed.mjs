@@ -1,24 +1,19 @@
 #!/usr/bin/env node
 /**
- * Seed ≥5 Qdrant collections for RQL Studio.
+ * Seed ≥5 Qdrant collections for the RQL Studio demo.
  *
  *   docker compose -f docker-compose.yml up -d
  *   npm run seed
  *
  * Or: npm run mock-qdrant  (other terminal) then npm run seed
  *
- * In this product a collection is the "table": list / index / upsert / delete / query.
+ * Collections ≈ "tables" in this product. Index PUT is soft-warned if the
+ * mock has no /index route; real Qdrant (docker compose) creates payload indexes.
  */
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  COLLECTION_NAMES,
-  DIM,
-  collectionBody,
-  generateAllCollections,
-  queryVectors,
-} from "./demo-data.mjs";
+import { DIM, NAME, collectionBody, queryVectors, seedBundles } from "./demo-data.mjs";
 
 const URL = (process.env.QDRANT_URL || "http://127.0.0.1:6333").replace(/\/$/, "");
 const KEY = process.env.QDRANT_API_KEY || "";
@@ -54,61 +49,59 @@ async function qdrant(method, path, body) {
   return text ? JSON.parse(text) : {};
 }
 
-async function seedCollection(name, points, indexes) {
+await waitReady(URL);
+
+const queries = queryVectors({ dim });
+const bundles = seedBundles({ dim });
+const seeded = [];
+
+for (const spec of bundles) {
   try {
-    await qdrant("DELETE", `/collections/${encodeURIComponent(name)}`);
+    await qdrant("DELETE", `/collections/${encodeURIComponent(spec.name)}`);
   } catch {
     /* first run */
   }
-  await qdrant("PUT", `/collections/${encodeURIComponent(name)}`, collectionBody(dim));
+
+  await qdrant("PUT", `/collections/${encodeURIComponent(spec.name)}`, collectionBody(dim));
+
   const batch = 40;
-  for (let i = 0; i < points.length; i += batch) {
-    await qdrant("PUT", `/collections/${encodeURIComponent(name)}/points?wait=true`, {
-      points: points.slice(i, i + batch),
+  for (let i = 0; i < spec.points.length; i += batch) {
+    await qdrant("PUT", `/collections/${encodeURIComponent(spec.name)}/points?wait=true`, {
+      points: spec.points.slice(i, i + batch),
     });
   }
-  for (const [field, schema] of indexes) {
+
+  for (const [field, schema] of spec.indexes) {
     try {
-      await qdrant("PUT", `/collections/${encodeURIComponent(name)}/index?wait=true`, {
+      await qdrant("PUT", `/collections/${encodeURIComponent(spec.name)}/index?wait=true`, {
         field_name: field,
         field_schema: schema,
       });
     } catch (err) {
-      console.warn(`index ${name}.${field}: ${err instanceof Error ? err.message : err}`);
+      console.warn(`index ${spec.name}.${field}: ${err instanceof Error ? err.message : err}`);
     }
   }
-  const info = await qdrant("GET", `/collections/${encodeURIComponent(name)}`);
-  return info.result?.points_count ?? points.length;
-}
 
-await waitReady(URL);
-
-const bundles = generateAllCollections({ dim });
-const queries = queryVectors({ dim });
-const counts = {};
-for (const bundle of bundles) {
-  counts[bundle.name] = await seedCollection(bundle.name, bundle.points, bundle.indexes);
+  const info = await qdrant("GET", `/collections/${encodeURIComponent(spec.name)}`);
+  const count = info.result?.points_count ?? spec.points.length;
+  seeded.push({ name: spec.name, count });
+  console.log(`Seeded ${spec.name}: ${count} points`);
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
 try {
   writeFileSync(
     join(here, "..", "src", "lib", "demo-query-vectors.json"),
-    `${JSON.stringify({ dim, collections: COLLECTION_NAMES, ...queries }, null, 2)}\n`,
+    `${JSON.stringify({ dim, collection: NAME, collections: seeded.map((s) => s.name), ...queries }, null, 2)}\n`,
   );
 } catch {
   console.warn("skip writing src/lib/demo-query-vectors.json (read-only image is fine)");
 }
 
-console.log(`Seeded ${bundles.length} Qdrant collections at ${URL}`);
-for (const bundle of bundles) {
-  console.log(
-    `  ${bundle.name}: ${counts[bundle.name]} points · ${bundle.spec.purpose}`,
-  );
-}
-console.log(`  ${dim}-d cosine named vector "dense" · sparse "bm25_sparse"`);
 console.log("");
-console.log("Open RQL Studio and pick a collection (these are the demo \"tables\"):");
-console.log("  Docker UI:  http://127.0.0.1:8080  (connect form: http://127.0.0.1:6333)");
-console.log("  Host Vite:  cd web && npm run dev → http://127.0.0.1:5173");
+console.log(`Seeded ${seeded.length} collections at ${URL} (${dim}-d dense + bm25_sparse)`);
+for (const s of seeded) console.log(`  - ${s.name} (${s.count} points)`);
+console.log("");
+console.log("Open RQL Studio → Connect → pick a collection in the sidebar.");
+console.log("These collections are the demo \"tables\".");
 console.log("Stored demo query vectors are labeled as such — not text embeddings.");

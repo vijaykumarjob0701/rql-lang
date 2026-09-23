@@ -27,53 +27,53 @@ export const QDRANT_COLLECTIONS: CollectionMeta[] = [
   },
   {
     name: "docs_support",
-    purpose: "Support tickets (queue / priority / status)",
+    purpose: "Support-topic slice",
     denseTopic: "support",
     altTopic: "support",
-    filter: "queue = 'billing' AND priority >= 2",
-    altFilter: "status = 'open'",
-    altTitle: "Open tickets",
-    colorField: "queue",
+    filter: "tenant_id = 'acme' AND clearance >= 2",
+    altFilter: "lang = 'en'",
+    altTitle: "English only",
+    colorField: "tenant_id",
   },
   {
     name: "docs_legal",
-    purpose: "Legal memos (jurisdiction / privilege / matter)",
+    purpose: "Legal-topic slice",
     denseTopic: "legal",
     altTopic: "legal",
-    filter: "jurisdiction = 'US'",
-    altFilter: "privilege = 'work_product'",
-    altTitle: "Work-product only",
-    colorField: "jurisdiction",
+    filter: "tenant_id = 'acme' AND clearance >= 2",
+    altFilter: "source = 'memo'",
+    altTitle: "Memos only",
+    colorField: "tenant_id",
   },
   {
     name: "docs_product",
-    purpose: "Product specs (product_line / stage / sku)",
+    purpose: "Product-topic slice",
     denseTopic: "product",
     altTopic: "product",
-    filter: "product_line = 'search'",
-    altFilter: "stage = 'ga'",
-    altTitle: "GA specs",
-    colorField: "product_line",
+    filter: "tenant_id = 'acme' AND clearance >= 2",
+    altFilter: "source = 'rfc'",
+    altTitle: "RFC sources",
+    colorField: "tenant_id",
   },
   {
     name: "docs_research",
-    purpose: "Research papers (venue / year / author)",
+    purpose: "Research-topic slice",
     denseTopic: "research",
     altTopic: "research",
-    filter: "venue = 'SIGIR' AND year >= 2023",
-    altFilter: "venue = 'EMNLP'",
-    altTitle: "EMNLP papers",
-    colorField: "venue",
+    filter: "tenant_id = 'acme' AND clearance >= 2",
+    altFilter: "year >= 2023",
+    altTitle: "Recent years",
+    colorField: "year",
   },
   {
     name: "logs_ops",
-    purpose: "Ops event log (service / level / env)",
+    purpose: "Ops-topic slice",
     denseTopic: "ops",
     altTopic: "ops",
-    filter: "service = 'ingest' AND level = 'error'",
-    altFilter: "env = 'prod'",
-    altTitle: "Prod only",
-    colorField: "level",
+    filter: "tenant_id = 'acme' AND clearance >= 2",
+    altFilter: "source = 'ticket'",
+    altTitle: "Ticket sources",
+    colorField: "source",
   },
 ];
 
@@ -98,3 +98,16 @@ export function sortCollectionNames(names: string[]): string[] {
 export function retargetRetrieve(rql: string, collection: string): string {
   return rql.replace(/^(\s*RETRIEVE)\s+[A-Za-z_][A-Za-z0-9_]*/m, `$1 ${collection}`);
 }
+
+/** Keep current selection if it still exists; else prefer studio_demo, else first. */
+export function preferCollection(
+  names: string[],
+  current: string | null | undefined,
+  fallback = "studio_demo",
+): string | null {
+  if (current && names.includes(current)) return current;
+  if (names.includes(fallback)) return fallback;
+  return names[0] ?? null;
+}
+
+export const COLLECTION_POLL_MS = 5000;

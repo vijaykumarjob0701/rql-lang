@@ -8,111 +8,102 @@ export const SEED = 20260923;
 export const POINT_COUNT = 120;
 
 /**
- * Qdrant collections in this demo. In this product a collection is the
- * "table": a named point set you list, index, upsert, delete, and query.
+ * Qdrant collections ≈ "tables". Same payload fields on every collection;
+ * topic-specific ones are slices of generatePoints (verified local counts:
+ * studio_demo 120, others 40).
  */
+export const SHARED_INDEXES = [
+  ["tenant_id", "keyword"],
+  ["topic", "keyword"],
+  ["clearance", "integer"],
+  ["lang", "keyword"],
+  ["source", "keyword"],
+];
+
 export const COLLECTION_SPECS = [
   {
-    name: "studio_demo",
+    name: NAME,
     purpose: "General mixed corpus + ACL (tenant_id / clearance)",
-    kind: "mixed",
-    n: 120,
-    colorField: "topic",
+    topicFilter: null,
+    points: POINT_COUNT,
+    seedOffset: 0,
     denseTopic: "research",
     altTopic: "legal",
     filter: "tenant_id = 'acme' AND clearance >= 2",
     altFilter: "tenant_id = 'globex' AND clearance >= 1",
     altTitle: "Globex tenant filter",
-    indexes: [
-      ["tenant_id", "keyword"],
-      ["topic", "keyword"],
-      ["clearance", "integer"],
-      ["lang", "keyword"],
-      ["source", "keyword"],
-    ],
+    colorField: "topic",
+    indexes: SHARED_INDEXES,
   },
   {
     name: "docs_support",
-    purpose: "Support tickets (queue / priority / status)",
-    kind: "support",
-    n: 40,
-    colorField: "queue",
+    purpose: "Support-topic slice",
+    topicFilter: "support",
+    points: 40,
+    seedOffset: 101,
     denseTopic: "support",
     altTopic: "support",
-    filter: "queue = 'billing' AND priority >= 2",
-    altFilter: "status = 'open'",
-    altTitle: "Open tickets",
-    indexes: [
-      ["queue", "keyword"],
-      ["priority", "integer"],
-      ["status", "keyword"],
-    ],
+    filter: "tenant_id = 'acme' AND clearance >= 2",
+    altFilter: "lang = 'en'",
+    altTitle: "English only",
+    colorField: "tenant_id",
+    indexes: SHARED_INDEXES,
   },
   {
     name: "docs_legal",
-    purpose: "Legal memos (jurisdiction / privilege / matter)",
-    kind: "legal",
-    n: 32,
-    colorField: "jurisdiction",
+    purpose: "Legal-topic slice",
+    topicFilter: "legal",
+    points: 40,
+    seedOffset: 202,
     denseTopic: "legal",
     altTopic: "legal",
-    filter: "jurisdiction = 'US'",
-    altFilter: "privilege = 'work_product'",
-    altTitle: "Work-product only",
-    indexes: [
-      ["jurisdiction", "keyword"],
-      ["privilege", "keyword"],
-      ["matter", "keyword"],
-    ],
+    filter: "tenant_id = 'acme' AND clearance >= 2",
+    altFilter: "source = 'memo'",
+    altTitle: "Memos only",
+    colorField: "tenant_id",
+    indexes: SHARED_INDEXES,
   },
   {
     name: "docs_product",
-    purpose: "Product specs (product_line / stage / sku)",
-    kind: "product",
-    n: 36,
-    colorField: "product_line",
+    purpose: "Product-topic slice",
+    topicFilter: "product",
+    points: 40,
+    seedOffset: 303,
     denseTopic: "product",
     altTopic: "product",
-    filter: "product_line = 'search'",
-    altFilter: "stage = 'ga'",
-    altTitle: "GA specs",
-    indexes: [
-      ["product_line", "keyword"],
-      ["stage", "keyword"],
-    ],
+    filter: "tenant_id = 'acme' AND clearance >= 2",
+    altFilter: "source = 'rfc'",
+    altTitle: "RFC sources",
+    colorField: "tenant_id",
+    indexes: SHARED_INDEXES,
   },
   {
     name: "docs_research",
-    purpose: "Research papers (venue / year / author)",
-    kind: "research",
-    n: 40,
-    colorField: "venue",
+    purpose: "Research-topic slice",
+    topicFilter: "research",
+    points: 40,
+    seedOffset: 404,
     denseTopic: "research",
     altTopic: "research",
-    filter: "venue = 'SIGIR' AND year >= 2023",
-    altFilter: "venue = 'EMNLP'",
-    altTitle: "EMNLP papers",
-    indexes: [
-      ["venue", "keyword"],
-      ["year", "integer"],
-    ],
+    filter: "tenant_id = 'acme' AND clearance >= 2",
+    altFilter: "year >= 2023",
+    altTitle: "Recent years",
+    colorField: "year",
+    indexes: SHARED_INDEXES,
   },
   {
     name: "logs_ops",
-    purpose: "Ops event log (service / level / env)",
-    kind: "ops",
-    n: 48,
-    colorField: "level",
+    purpose: "Ops-topic slice",
+    topicFilter: "ops",
+    points: 40,
+    seedOffset: 505,
     denseTopic: "ops",
     altTopic: "ops",
-    filter: "service = 'ingest' AND level = 'error'",
-    altFilter: "env = 'prod'",
-    altTitle: "Prod only",
-    indexes: [
-      ["service", "keyword"],
-      ["level", "keyword"],
-      ["env", "keyword"],
-    ],
+    filter: "tenant_id = 'acme' AND clearance >= 2",
+    altFilter: "source = 'ticket'",
+    altTitle: "Ticket sources",
+    colorField: "source",
+    indexes: SHARED_INDEXES,
   },
 ];
 
@@ -185,105 +176,30 @@ export function collectionSpec(name) {
   return COLLECTION_SPECS.find((s) => s.name === name) || COLLECTION_SPECS[0];
 }
 
-function pick(list, idx) {
-  return list[idx % list.length];
-}
-
-export function generateSpecializedPoints(spec, { dim = DIM, seed = SEED } = {}) {
-  const { randn } = makeRng(seed + spec.name.length * 31);
-  const topic = spec.denseTopic;
-  const cluster = Math.max(0, TOPICS.indexOf(topic));
-  const centers = centroids(dim, seed);
-  const center = centers[cluster];
-  const n = spec.n;
-  return Array.from({ length: n }, (_, idx) => {
-    const noise = Array.from({ length: dim }, () => 0.08 * randn());
-    const dense = normalize(center.map((x, j) => x + noise[j]));
-    return {
-      id: idx + 1,
-      vector: { dense, bm25_sparse: sparseForTopic(topic) },
-      payload: specializedPayload(spec.kind, idx),
-    };
+/** Same slice logic as the working local seed.mjs. */
+export function pointsFor(spec, { dim = DIM } = {}) {
+  const raw = generatePoints({
+    dim,
+    n: Math.max(spec.points * 3, 60),
+    seed: SEED + spec.seedOffset,
   });
+  let pts = spec.topicFilter
+    ? raw.filter((p) => p.payload.topic === spec.topicFilter).slice(0, spec.points)
+    : raw.slice(0, spec.points);
+  if (pts.length < spec.points) pts = raw.slice(0, spec.points);
+  return pts.map((p, i) => ({ ...p, id: i + 1 }));
 }
 
-export function specializedPayload(kind, idx) {
-  if (kind === "support") {
-    const queues = ["billing", "auth", "shipping"];
-    const statuses = ["open", "pending", "closed"];
-    return {
-      queue: pick(queues, idx),
-      priority: 1 + (idx % 5),
-      status: pick(statuses, idx),
-      customer: pick(TENANTS, idx),
-      product: pick(["search", "chat", "billing"], idx),
-      title: `ticket ${idx + 1}`,
-    };
-  }
-  if (kind === "legal") {
-    const jurisdictions = ["US", "EU", "UK"];
-    const privileges = ["work_product", "public", "confidential"];
-    const matters = ["alpha", "bravo", "charlie"];
-    return {
-      jurisdiction: pick(jurisdictions, idx),
-      privilege: pick(privileges, idx),
-      matter: pick(matters, idx),
-      counsel: pick(["lee", "nguyen", "okonkwo"], idx),
-      title: `memo ${idx + 1}`,
-    };
-  }
-  if (kind === "product") {
-    const lines = ["search", "chat", "billing"];
-    const stages = ["ga", "beta", "preview"];
-    return {
-      product_line: pick(lines, idx),
-      stage: pick(stages, idx),
-      sku: `SKU-${1000 + idx}`,
-      owner: pick(["dana", "ravi", "kim"], idx),
-      title: `spec ${idx + 1}`,
-    };
-  }
-  if (kind === "research") {
-    const venues = ["SIGIR", "EMNLP", "NeurIPS"];
-    return {
-      venue: pick(venues, idx),
-      year: 2022 + (idx % 4),
-      author: pick(["chen", "alvarez", "berg"], idx),
-      citation_count: (idx * 3) % 40,
-      title: `paper ${idx + 1}`,
-    };
-  }
-  if (kind === "ops") {
-    const services = ["ingest", "query", "index"];
-    const levels = ["error", "warn", "info"];
-    const envs = ["prod", "stage", "dev"];
-    return {
-      service: pick(services, idx),
-      level: pick(levels, idx),
-      env: pick(envs, idx),
-      request_id: `req-${idx + 1}`,
-      title: `event ${idx + 1}`,
-    };
-  }
-  return {
-    topic: pick(TOPICS, idx),
-    tenant_id: pick(TENANTS, idx),
-    clearance: 1 + (idx % 5),
-    title: `note ${idx + 1}`,
-  };
-}
-
-export function generateAllCollections({ dim = DIM, seed = SEED } = {}) {
+export function seedBundles({ dim = DIM } = {}) {
   return COLLECTION_SPECS.map((spec) => ({
     spec,
     name: spec.name,
     indexes: spec.indexes,
-    points:
-      spec.kind === "mixed"
-        ? generatePoints({ dim, n: spec.n, seed })
-        : generateSpecializedPoints(spec, { dim, seed }),
+    points: pointsFor(spec, { dim }),
   }));
 }
+
+export const generateAllCollections = seedBundles;
 
 export function generatePoints({ dim = DIM, n = POINT_COUNT, seed = SEED } = {}) {
   const { randn } = makeRng(seed + 17);

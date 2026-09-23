@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { CollectionInfo } from "../lib/api";
 import { QDRANT_COLLECTION_NAMES, collectionMeta } from "../lib/collections";
 
@@ -8,6 +9,7 @@ type Props = {
   emptyHint: string;
   title?: string;
   itemNoun?: string;
+  updatedAt?: number | null;
 };
 
 function vectorSummary(vectors: unknown): string {
@@ -33,12 +35,25 @@ export function CollectionList({
   emptyHint,
   title = "Collections",
   itemNoun = "points",
+  updatedAt = null,
 }: Props) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (updatedAt == null) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [updatedAt]);
+  const agoSec = updatedAt == null ? null : Math.max(0, Math.round((now - updatedAt) / 1000));
+  const refreshHint =
+    agoSec == null ? null : agoSec <= 1 ? "Updated just now" : `Updated ${agoSec}s ago`;
+
   return (
     <section style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <div className="pane-head">
         {title}
-        <span className="faint">{items.length}</span>
+        <span className="faint" data-testid="collection-refresh">
+          {refreshHint ? `${items.length} · ${refreshHint}` : items.length}
+        </span>
       </div>
       <div className="pane-body">
         {items.length === 0 ? (

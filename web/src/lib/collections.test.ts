@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTION_NAMES, COLLECTION_SPECS, generateAllCollections } from "../../scripts/demo-data.mjs";
-import { QDRANT_COLLECTION_NAMES, collectionMeta, retargetRetrieve, sortCollectionNames } from "./collections";
+import {
+  QDRANT_COLLECTION_NAMES,
+  collectionMeta,
+  preferCollection,
+  retargetRetrieve,
+  sortCollectionNames,
+} from "./collections";
 import { diagnoseRql } from "./rqlParse";
 import { buildQdrantRecipes, recipesForBackend } from "./demoVectors";
 import { examplesByKind, qdrantExamples } from "./qdrantExamples";
@@ -51,7 +57,15 @@ describe("Qdrant demo collections (the product “tables”)", () => {
         expect(recipe.rql).toContain(`RETRIEVE ${name}`);
       }
     }
-    expect(recipesForBackend("qdrant", "docs_support")[0]!.rql).toMatch(/queue = 'billing'/);
+    expect(recipesForBackend("qdrant", "docs_support")[0]!.rql).toMatch(/RETRIEVE docs_support/);
+    expect(recipesForBackend("qdrant", "docs_support")[0]!.rql).toMatch(/tenant_id = 'acme'/);
+  });
+
+  it("keeps the current collection unless it disappeared", () => {
+    expect(preferCollection(["studio_demo", "docs_legal"], "docs_legal")).toBe("docs_legal");
+    expect(preferCollection(["studio_demo", "docs_legal"], "gone")).toBe("studio_demo");
+    expect(preferCollection(["docs_support"], null)).toBe("docs_support");
+    expect(preferCollection([], "studio_demo")).toBeNull();
   });
 
   it("sorts seeded names before unknowns", () => {

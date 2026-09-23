@@ -40,16 +40,16 @@ Optional env (compose file): `QDRANT_API_KEY`, `QDRANT_INTERNAL_URL` (default `h
 
 In this product a **Qdrant collection** is the table: a named set of points you list, index, upsert, delete, and query. Seed creates **six** collections (not SQL tables):
 
-| Collection | Purpose | Typical payload | Seed indexes |
-|---|---|---|---|
-| `studio_demo` | General mixed corpus + ACL | `tenant_id`, `clearance`, `topic`, `title` | tenant_id, topic, clearance, lang, source |
-| `docs_support` | Support tickets | `queue`, `priority`, `status`, `customer` | queue, priority, status |
-| `docs_legal` | Legal memos | `jurisdiction`, `privilege`, `matter` | jurisdiction, privilege, matter |
-| `docs_product` | Product specs | `product_line`, `stage`, `sku` | product_line, stage |
-| `docs_research` | Research papers | `venue`, `year`, `author` | venue, year |
-| `logs_ops` | Ops event log | `service`, `level`, `env` | service, level, env |
+| Collection | Points | Purpose |
+|---|---|---|
+| `studio_demo` | 120 | Mixed topics + ACL (`tenant_id`, `clearance`, `topic`, …) |
+| `docs_support` | 40 | `topic = support` slice |
+| `docs_legal` | 40 | `topic = legal` slice |
+| `docs_product` | 40 | `topic = product` slice |
+| `docs_research` | 40 | `topic = research` slice |
+| `logs_ops` | 40 | `topic = ops` slice |
 
-Each collection has enough points to query, its own payload shape, and 128-d named vector `dense` plus toy `bm25_sparse`. Switching the sidebar **Collections** list retargets Recipes, scroll, Data, Indexes, Visualize, and Execute.
+Same payload fields and indexes on every collection (`tenant_id`, `topic`, `clearance`, `lang`, `source`). Named dense `dense` (128-d cosine) + toy `bm25_sparse`. After Connect, the sidebar lists **every** collection from `GET /collections` and refreshes every ~5s (pauses when the tab is hidden). Switching collections scopes Recipes, scroll, Data, Indexes, Visualize, and Execute. No Reconnect needed after seed.
 
 ## Collection ops (update / index / delete / query)
 
@@ -248,7 +248,7 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Connect with URL `http://12
 
 ### 2. What seed creates
 
-**Six Qdrant collections** (the demo tables). `studio_demo` is the mixed ACL corpus (120 points). The others (`docs_support`, `docs_legal`, `docs_product`, `docs_research`, `logs_ops`) have distinct payload shapes and ≥32 points each. All share named dense `dense` (128-d cosine) and toy sparse `bm25_sparse` (**not** a real BM25 analyzer). Stored demo query vectors go to `src/lib/demo-query-vectors.json` (labeled as such).
+**Six Qdrant collections** (the demo tables): `studio_demo` (120 mixed points) plus topic slices `docs_support`, `docs_legal`, `docs_product`, `docs_research`, `logs_ops` (40 each). Shared payload (`tenant_id`, `topic`, `clearance`, `lang`, `source`) and toy sparse `bm25_sparse` (**not** a real BM25 analyzer). Index PUT is soft-warned on mock-qdrant; docker Qdrant creates the payload indexes. Stored demo query vectors go to `src/lib/demo-query-vectors.json`.
 
 `npm run mock-qdrant` also creates all six in-memory (no extra seed required). `npm run seed` against Docker Qdrant or the mock recreates them.
 
@@ -257,7 +257,7 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Connect with URL `http://12
 Sidebar **Recipes** load RQL **and** matching stored demo vectors. You do not need the Demo random vector button for these.
 
 1. **Filtered dense** — already selected on `studio_demo`. Click **Execute**. Hits follow that collection’s payload filter (`tenant_id=acme` and `clearance >= 2` here).
-2. Switch to **docs_support** (or any other collection). Recipes retarget `RETRIEVE` and the filter (e.g. `queue = 'billing'`). Execute again.
+2. Switch to **docs_support** (or any other collection). Recipes retarget `RETRIEVE` to that collection. Execute again. New collections from a reseed appear in the sidebar within ~5s.
 3. **Dense only** — unfiltered neighbors in the selected collection.
 4. **Alternate filter** — second payload predicate for that collection.
 5. **Hybrid RRF** — binds a stored sparse `{indices,values}`. Works on real Qdrant and on mock-qdrant’s toy RRF.
