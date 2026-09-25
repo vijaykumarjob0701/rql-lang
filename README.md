@@ -57,8 +57,14 @@ import { parse, compile, explain, emit } from "@vijaykumarjob0701/rql";
 ## Honesty
 
 - Profiles are **docs-derived** capability flags, not live probes.
-- Emit is **sketch-only** until live adapters land.
-- Do not publish to PyPI/npm from this tree yet; repo is intended to stay **private** until release.
+- Emit is **sketch-only** on this tree (`notExecuted: true`). It does not talk to live Qdrant / Elasticsearch / pgvector.
+- Do not publish to PyPI/npm from this tree yet.
+
+## Citation / Zenodo
+
+This GitHub repository is intended to stay **private**. A Zenodo software snapshot of the same v0.1.0 tree may still be **public**; that does not change GitHub visibility and is not a PyPI/npm release.
+
+Cite from [`CITATION.cff`](CITATION.cff). Deposit metadata lives in [`.zenodo.json`](.zenodo.json). Public companions: [research package](https://github.com/vijaykumarjob0701/rql-rag-query-language) and [rql-repro](https://github.com/vijaykumarjob0701/rql-repro).
 
 ## License
 

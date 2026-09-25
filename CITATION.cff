@@ -1,0 +1,43 @@
+cff-version: 1.2.0
+title: "rql-lang: Retrieval Query Language (RQL) library (Python + TypeScript)"
+message: "If you use this software, please cite it using these metadata."
+type: software
+authors:
+  - family-names: Kumar
+    given-names: Vijay
+version: "0.1.0"
+date-released: "2026-09-19"
+license: MIT
+repository-code: "https://github.com/vijaykumarjob0701/rql-lang"
+url: "https://github.com/vijaykumarjob0701/rql-rag-query-language"
+abstract: >-
+  Portable Retrieval Query Language (RQL) library for RAG retrieval plans
+  (Python and TypeScript). Parses RQL text, compiles a logical plan to a
+  vendor-capability physical plan, explains that plan, and emits vendor-request
+  sketches. This is not a vector database; adapters target existing engines
+  such as Qdrant, Elasticsearch, and pgvector. On the v0.1.0 tree, emit returns
+  documentation-shaped sketches (notExecuted: true) and does not execute against
+  a live database. A Zenodo snapshot may be public while the GitHub source
+  repository remains private. Packages are not published to PyPI or npm.
+keywords:
+  - RQL
+  - RAG
+  - vector database
+  - query language
+  - information retrieval
+  - Qdrant
+references:
+  - type: software
+    title: "RQL — RAG / vector query language (research narrative)"
+    authors:
+      - family-names: Kumar
+        given-names: Vijay
+    repository-code: "https://github.com/vijaykumarjob0701/rql-rag-query-language"
+    notes: "Public research, journal, and proposal materials that this library implements."
+  - type: software
+    title: "rql-repro — companion reproducibility package for RQL"
+    authors:
+      - family-names: Kumar
+        given-names: Vijay
+    repository-code: "https://github.com/vijaykumarjob0701/rql-repro"
+    notes: "Public companion: dataset registry, synthetic fixtures, and offline compile-stack reproduction."
