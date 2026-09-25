@@ -1,0 +1,38 @@
+{
+  "title": "rql-lang: Retrieval Query Language (RQL) library (Python + TypeScript)",
+  "version": "0.1.0",
+  "upload_type": "software",
+  "publication_date": "2026-09-19",
+  "access_right": "open",
+  "license": "mit",
+  "language": "eng",
+  "creators": [
+    {
+      "name": "Kumar, Vijay"
+    }
+  ],
+  "keywords": [
+    "RQL",
+    "RAG",
+    "vector database",
+    "query language",
+    "information retrieval",
+    "Qdrant"
+  ],
+  "description": "<p>rql-lang is a portable Retrieval Query Language (RQL) library for RAG retrieval plans. It is not a vector database. The library parses RQL text, compiles a logical plan to a vendor-capability physical plan, explains that plan, and emits vendor-request sketches. Adapters are aimed at existing engines such as Qdrant, Elasticsearch, and pgvector rather than replacing them.</p><p>This v0.1.0 snapshot implements parse → compile → explain → emit. On this tree, emit returns documentation-shaped sketches (notExecuted: true) and does not run queries against a live vector database. Live Qdrant execute/CLI and RQL Studio work exist only on unmerged draft branches and are not part of this deposit.</p><p>Development continues in a private GitHub repository. A Zenodo snapshot of this software may be public while that GitHub repository remains private. Do not treat this record as identical to a public GitHub tree. The packages are not published to PyPI or npm.</p>",
+  "notes": "Manual software deposit (GitHub-Zenodo webhook cannot be used while the source repository stays private). This record supplements the public research package and is accompanied by the public rql-repro companion. Related draft GitHub PRs for live Qdrant execute and RQL Studio are not included. No PyPI or npm release is claimed.",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/vijaykumarjob0701/rql-rag-query-language",
+      "relation": "isSupplementTo",
+      "resource_type": "other",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://github.com/vijaykumarjob0701/rql-repro",
+      "relation": "isSupplementedBy",
+      "resource_type": "software",
+      "scheme": "url"
+    }
+  ]
+}
